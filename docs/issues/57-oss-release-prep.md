@@ -12,9 +12,10 @@ executes.
 
 **The repository is already public** (visibility PUBLIC since creation),
 so there is no private→public flip; what this issue gates is the
-**v1.0 release announcement**: history scanned, licensing decided
-(ADR-009 — **blocked on owner**; until then the public repo carries no
-license, i.e. all-rights-reserved), and trust documents in place. The
+**v1.0 release announcement**: history scanned, licensing implemented
+(ADR-009 Accepted: MIT — until this issue lands the LICENSE file, the
+public repo formally remains all-rights-reserved), and trust documents
+in place. The
 "flip checklist" below is therefore a release checklist; the only
 owner-visibility action left is confirming repo settings (issues/
 actions/packages exposure) rather than changing visibility.
@@ -29,16 +30,14 @@ governance beyond a solo-maintainer note, store publication (v2).
 
 ## Detailed Requirements
 
-1. **License (human gate)**: obtain the owner's ADR-009 decision —
-   which covers BOTH the license choice AND the header policy (the
-   proposed default, repo-level notice without per-file headers, is
-   part of what the owner accepts or amends in ADR-009; this issue
-   implements whatever the accepted ADR text says); update ADR-009
-   status to Accepted; add `LICENSE` (exact SPDX text), `license`
-   fields in every package.json, and a README licensing section. Add
+1. **License — decided (ADR-009 Accepted 2026-07-11: MIT)**: implement
+   exactly the accepted ADR text — `LICENSE` (MIT, owner as copyright
+   holder), `license: "MIT"` in every package.json, repo-level notice
+   only (no per-file headers), and a README licensing section. Add
    `license-checker-rseidelsohn` (or `pnpm licenses list` script) CI
    step failing on copyleft-incompatible or unknown prod dependency
-   licenses relative to the chosen license (policy table in the
+   licenses per the ADR-009 policy: MIT/Apache-2.0/BSD/ISC-class
+   allowed in prod; GPL/AGPL/SSPL-class rejected (policy table in the
    script).
 2. README rewrite (bilingual: English primary, 日本語 section
    mirroring the essentials): what famchat is (child-safety-first
@@ -108,7 +107,7 @@ pnpm docs:check
 ## Dependencies
 
 51 (CI), 54 (security gate), 55 (docs), 56 (legal owner review — gates
-the flip checklist), **ADR-009 owner decision (human gate)**.
+the release checklist). ADR-009 is already Accepted (MIT).
 
 ## Non-goals
 

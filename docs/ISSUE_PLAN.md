@@ -89,7 +89,7 @@ agent. `Deps` = issue numbers that must be completed first.
 | 54 | `54-security-hardening-gate.md` | Security hardening gate (DESIGN §19 checklist) | L | 35,38,49,51,53 |
 | 55 | `55-selfhost-and-operator-docs.md` | Self-host + operator docs (ja/en) | M | 35,49,50,51,52 |
 | 56 | `56-beta-legal-docs.md` | Closed-beta ToS/Privacy templates + consent flow | M | 07,20,36,53,55 |
-| 57 | `57-oss-release-prep.md` | OSS release prep (license, SECURITY.md, scans) | M | 51,54,55,56, ADR-009 decision |
+| 57 | `57-oss-release-prep.md` | OSS release prep (license, SECURITY.md, scans) | M | 51,54,55,56 (ADR-009: MIT, accepted) |
 
 ## 3. Implementation waves
 
@@ -115,8 +115,8 @@ Waves are sequential; issues inside a wave may run in parallel when their
   suppression is part of the fanout contract (DESIGN §14.2).
 - 49 (production compose) precedes 51 (CI/CD) because the pipeline publishes
   the images the compose file pins.
-- 57 (OSS release prep) is blocked on the **owner's license decision**
-  (ADR-009) — flagged as a human gate, not an agent task.
+- 57 (OSS release prep) was gated on the owner's license decision
+  (ADR-009) — **resolved: MIT, accepted 2026-07-11**; 57 implements it.
 
 ## 5. Coverage table: DESIGN.md sections → issues
 
@@ -191,7 +191,7 @@ additional locales.
 
 | # | Unknown | Trigger to resolve | Likely artifact |
 |---|---|---|---|
-| U1 | License choice (ADR-009) | Owner decision before 57 | LICENSE + README section |
+| U1 | License choice (ADR-009) — **resolved 2026-07-11: MIT, ADR-009 Accepted** | closed | LICENSE + README section land in 57 |
 | U2 | Expo push behavior in TestFlight/internal builds (credentials, quirks) | During 46/48 | Possible extra issue on push credential runbook |
 | U3 | iOS Web Push reliability in practice | During 38 | Doc caveats; possibly steer-to-app banner issue |
 | U4 | sharp HEIC decode support in chosen base image | During 18 | Either libvips build tweak or HEIC→client-side conversion issue |
