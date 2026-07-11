@@ -39,9 +39,15 @@ Out of scope: Web Push delivery (38), Expo delivery (46), notification UI
       `quiet_hours.updated`, `space.deletion_requested` (36).
    2. Per recipient: apply suppression — room `notify=none`
       (message.new), membership `board_notify=none` (board types), child
-      quiet hours via 29's `isChildQuietNow` (suppresses **push only**;
-      in-app row always written; guardian safety types never suppressed),
-      suspended space/user ⇒ drop entirely (35).
+      quiet hours via 29's `isChildQuietNow`: for **content types**
+      (message.new, board.*) suppression is **total** — no push, no WS,
+      no feed row (DESIGN §14.2: unread state derives from room read
+      pointers, so nothing is lost and no message excerpt can leak
+      through the lock via the quiet-exempt feed endpoint); child-
+      directed system types (`quiet_hours.updated`,
+      `space.deletion_requested`) still write rows (push deferred);
+      guardian safety types never suppressed; suspended space/user ⇒
+      drop entirely (35).
    3. INSERT `notifications` row: type, `payload` (i18n params: sender
       name, room name, excerpt ≤ 30 chars — computed **at compose time**,
       accepting staleness; never message ids requiring later joins),
@@ -49,17 +55,28 @@ Out of scope: Web Push delivery (38), Expo delivery (46), notification UI
    4. Emit WS `notification.created` to `user:<id>`.
    5. Hand off to transport dispatch: `dispatchPush(recipient,
       rendered)` — this issue implements it as a registry with zero
-      transports (38 registers webpush, 46 registers expo); rendering
-      happens here: i18next server instance renders title/body in
-      `users.locale` from `notifications.*` catalog keys (flagged-content
+      transports (38 registers webpush, 46 registers expo).
+      **Rendering split (canonical)**: notification ROWS store only
+      `{ type, payload }` — in-app clients (39/46) render them
+      client-side from the shared catalog (locale-switch-safe); ONLY the
+      push transports receive server-rendered title/body, composed here
+      with the i18next server instance in `users.locale` (flagged-content
       types must not include matched terms — compose from category counts
       only, DESIGN §14.1).
-4. API (`notifications` router): `feed({ cursor? })` (own, newest-first,
-   50/page), `markRead({ ids[] })`, `markAllRead()`, `unreadCounts()` →
-   `{ notifications: n, rooms: [{ roomId, unread }] }` (reuses 16's
-   query; one aggregate for app badges), `registerPush({ kind, token/
-   subscription })` upsert + `unregisterPush` — validation per kind
-   (webpush: endpoint+keys shape; expo: `ExponentPushToken[…]` format).
+4. API (`notifications` router; DTOs pinned in
+   `packages/shared/src/api/notifications.ts`): `feed({ cursor? })` —
+   own rows only, newest-first (id DESC, cursor = last id), 50/page,
+   `NotificationDTO = { id, type, spaceId, payload, link, readAt,
+   createdAt }`; `markRead({ ids: string[] ≤ 100 })` and `markAllRead()`
+   — **scoped `WHERE user_id = ctx.user.id` (ids belonging to other
+   users are silently ignored; test proves cross-user ids cannot be
+   marked)**; `unreadCounts()` → `{ notifications: n, rooms: [{ roomId,
+   unread: number|null }] }` (reuses 16's query; one aggregate for app
+   badges); `registerPush({ kind, token/subscription })` upsert +
+   `unregisterPush({ id })` — **own subscriptions only (`user_id`
+   scoped, same test pattern)**; validation per kind (webpush:
+   endpoint+keys shape per 38's rules; expo: `ExponentPushToken[…]`
+   format).
 5. Retention: feed rows > 90 days pruned by 36's expiry sweeper (add the
    clause there — cross-issue note; implement the query helper here).
 6. Tests: catalog table-driven — for every type: correct recipients,
@@ -75,8 +92,9 @@ Out of scope: Web Push delivery (38), Expo delivery (46), notification UI
 
 - [ ] Every DESIGN §14.2 row (+ `space.deletion_requested`) implemented
       and table-tested for recipients & suppression.
-- [ ] All notification text server-rendered in recipient locale; ja/en
-      catalogs complete for every type (parity-checked).
+- [ ] Rendering split enforced: rows carry `{ type, payload }` only;
+      push transports get server-rendered text in the recipient locale;
+      ja/en catalogs complete for every type (parity-checked).
 - [ ] In-app feed correct and live; unreadCounts aggregates notifications
       + rooms.
 - [ ] Transport registry ready for 38/46 with zero behavior change needed

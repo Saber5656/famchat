@@ -28,12 +28,15 @@ logic beyond tag collapse (v2).
    sized up, count dot simplified.
 2. Feed panel (popover ≥ 900 px; full route `/notifications` below):
    infinite scroll of `notifications.feed`; row renderer per type —
-   localized title/body (server-composed strings from payload keys/
-   params rendered client-side via the same `notifications.*` catalog:
-   client re-renders from `{ type, payload }` for locale-switch
-   correctness rather than storing prerendered text — matches 37's row
-   shape), type icon (message/board/safety/system families), relative
-   time, unread dot; click → `link` navigation + `markRead([id])`;
+   the row carries `{ type, payload }` (37's canonical shape) and the
+   client renders localized title/body from the `notifications.*`
+   catalog (locale-switch-safe; nothing prerendered is stored). Payload
+   params (sender names, excerpts) are user-derived: render as plain
+   text via normal React escaping — never HTML, never linkified.
+   Type icon (message/board/safety/system families), relative time,
+   unread dot; click → navigate to `link` **only after validating it is
+   an app-internal relative route (same `^/(s/|notifications|settings)`
+   rule as 38's SW; else fall back to the feed)** + `markRead([id])`;
    "mark all read" button; empty state.
 3. Safety-type prominence: `moderation.flagged`, `report.new`,
    `child.device.linked` rows get a distinct accent + guardian-console
@@ -45,11 +48,15 @@ logic beyond tag collapse (v2).
    toggle (13's `rooms.setNotify`) with state icon in room list (21
    already renders it); board page (24) header gains board notify toggle
    (19's `board.setNotify`); copy explains scope ("この部屋の通知").
-6. Child rendering: children receive `message.new`/board types only (37
-   catalog); feed strings child-registered with furigana where the
-   namespace provides it; no safety types ever reach child feeds
-   (backend-guaranteed; UI asserts by rendering unknown-type rows as a
-   safe generic — forward-compat rule).
+6. Child rendering: a child's feed contains exactly what the 37 catalog
+   addresses to them (`message.new`, board types, `member.joined`,
+   `quiet_hours.updated`, `space.deletion_requested`); guardian safety
+   types (`moderation.flagged`, `report.new`, `child.device.linked`,
+   `export.ready`) never reach child feeds because their recipient sets
+   are guardian/owner-only — backend-guaranteed, and the UI additionally
+   renders any unknown type as a safe generic row (forward-compat rule).
+   Child-visible strings use the child register with furigana where the
+   namespace provides it.
 7. Tests: component — per-type renderer snapshot ja/en, unknown-type
    fallback, badge increments on WS event, explicit-read semantics;
    Playwright: B sends message → A's bell increments live → open feed →
@@ -69,14 +76,15 @@ logic beyond tag collapse (v2).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/web test -- --grep notifications
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/web test -- -t notifications
 pnpm --filter @famchat/web exec playwright test --grep @notifcenter
 ```
 
 ## Dependencies
 
-37 (feed/types), 21 (shell), 22 (room deep links), 24 (board toggle
-slot).
+21 (shell), 22 (room deep links + header menu), 24 (board toggle slot),
+31 (guardian console routes for safety deep links), 37 (feed/types).
 
 ## Non-goals
 

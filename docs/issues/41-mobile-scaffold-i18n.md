@@ -46,10 +46,11 @@ profiles/builds (48).
    (`parseRuby` from `@famchat/i18n`).
 5. API client: tRPC + TanStack Query against `EXPO_PUBLIC_API_URL`;
    bearer-token auth header injection from a token store module (42 fills
-   SecureStore; here an in-memory placeholder with the same interface);
-   `x-famchat-csrf` header not required for bearer (05) but harmless —
-   omit; error → `FamchatErrorCode` mapper reusing `errors.*` catalog;
-   global 401 → navigate to `(auth)`.
+   SecureStore; here an in-memory placeholder with the same interface).
+   CSRF: per DESIGN §6.3 the `x-famchat-csrf` header is required only
+   for cookie-authenticated requests; bearer requests are exempt, so the
+   mobile client sends no CSRF header. Error → `FamchatErrorCode` mapper
+   reusing `errors.*` catalog; global 401 → navigate to `(auth)`.
 6. Theme: tokens mirroring web kid-mode scale (shared values exported
    from `@famchat/shared/constants` where sensible — tap targets ≥ 44 pt,
    type scale, palette) via a `ThemeProvider` + `useTheme`; `data-kid`
@@ -59,11 +60,13 @@ profiles/builds (48).
    typecheck|lint` wired into root scripts (CI runs typecheck+unit; no
    native build in CI at this issue).
 8. Dev docs `apps/mobile/README.md`: running against local API over LAN
-   (find host IP, set `EXPO_PUBLIC_API_URL=http://<lan-ip>:8080`, CORS:
-   dev api allows the Expo origin — document adding the LAN origin to
-   `WEB_ORIGINS` in dev; note that bearer mode avoids cookie/CORS
-   complexity), Expo Go vs dev-build guidance (push needs dev build —
-   pointer to research doc).
+   (find host IP, set `EXPO_PUBLIC_API_URL=http://<lan-ip>:8080`).
+   Clarify the CORS reality: native Expo clients are not browsers — no
+   Origin-based CORS applies to their requests, and `WEB_ORIGINS` needs
+   NO change for mobile development; the only requirement is that the
+   API is reachable at the LAN URL (and that bearer auth is used, which
+   the client does by design). Expo Go vs dev-build guidance (push needs
+   a dev build — pointer to research doc).
 
 ## Acceptance Criteria
 
@@ -78,6 +81,7 @@ profiles/builds (48).
 ## Validation
 
 ```bash
+pnpm -w lint
 pnpm --filter @famchat/mobile typecheck && pnpm --filter @famchat/mobile test
 pnpm --filter @famchat/mobile exec expo start  # manual device smoke
 ```

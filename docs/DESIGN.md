@@ -281,7 +281,7 @@ Conventions:
 
 - DB table `sessions`; token = 32 random bytes, sent as `famchat_session` cookie (web) or `Authorization: Bearer` (mobile). Only `sha256(token)` stored.
 - Cookie: `HttpOnly; Secure; SameSite=Lax; Path=/`, 30-day sliding expiry, rotated on login (fixation defense). Mobile bearer: 90-day sliding. Child device sessions: 180-day sliding.
-- CSRF: state-changing HTTP requires header `x-famchat-csrf: 1` (custom header ⇒ CORS preflight ⇒ cross-origin blocked by strict `WEB_ORIGINS` allowlist). tRPC client sets it globally. Documented in §19.4.
+- CSRF: any state-changing HTTP request that authenticates **via cookie** must carry header `x-famchat-csrf: 1` (custom header ⇒ CORS preflight ⇒ cross-origin blocked by strict `WEB_ORIGINS` allowlist); bearer-authenticated requests (mobile) are exempt — the bearer header itself cannot be attached cross-site. The web tRPC client sets the header globally. Documented in §19.4.
 - Session context resolution: every authed request resolves `{ user, memberships }`; per-space procedures additionally require an active membership in the target space and attach `{ space, membership }`.
 - Logout revokes the session row. "Log out everywhere" revokes all of a user's sessions.
 - Auth-route rate limits: see §19.5 table.
@@ -598,8 +598,8 @@ Mutation → `notifyService.enqueue(event)` (BullMQ) → worker composes per rec
 
 | type | recipients | trigger | suppressed by |
 |---|---|---|---|
-| `message.new` | room members except sender | message.created (clean/flagged) | room notify=none; recipient child in quiet hours (deferred to feed only) |
-| `board.post.new` / `board.comment.new` | space members except author | board create | board_notify=none; child quiet hours |
+| `message.new` | room members except sender | message.created (clean/flagged) | room notify=none; recipient child in quiet hours — **suppressed entirely** (no push, no WS, no feed row; unread state derives from room pointers §7.7, so nothing is lost and no content leaks through the lock) |
+| `board.post.new` / `board.comment.new` | space members except author | board create | board_notify=none; child quiet hours — suppressed entirely (same rule) |
 | `moderation.flagged` | space guardians | flag/block hit | never |
 | `report.new` | space guardians | report.create | never |
 | `child.device.linked` | space guardians | device link succeeds | never |

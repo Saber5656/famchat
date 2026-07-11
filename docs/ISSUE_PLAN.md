@@ -69,13 +69,13 @@ agent. `Deps` = issue numbers that must be completed first.
 | 34 | `34-web-quiet-hours-ux.md` | Web quiet hours UX (lock screen + editor) | M | 25,29,31 |
 | 35 | `35-operator-admin-api-and-cli.md` | Operator admin REST API + `pnpm ops` CLI | M | 07,11,12 |
 | 36 | `36-data-lifecycle-deletion-export.md` | Data lifecycle: deletion, purge, export | L | 18,30,35 |
-| 37 | `37-notification-framework-inapp.md` | Notification framework + in-app feed (worker fanout) | L | 15,18,29 |
-| 38 | `38-web-push-and-pwa.md` | Web Push (VAPID) + PWA installability | L | 37,20 |
-| 39 | `39-web-notifications-ui.md` | Web notifications UI (feed, badges, prefs) | M | 37,21 |
-| 40 | `40-i18n-completeness-gate.md` | i18n completeness gate + tooling | M | 20 |
+| 37 | `37-notification-framework-inapp.md` | Notification framework + in-app feed (worker fanout) | L | 15,18,29,35,36 |
+| 38 | `38-web-push-and-pwa.md` | Web Push (VAPID) + PWA installability | L | 20,25,37 |
+| 39 | `39-web-notifications-ui.md` | Web notifications UI (feed, badges, prefs) | M | 21,22,24,31,37 |
+| 40 | `40-i18n-completeness-gate.md` | i18n completeness gate + tooling | M | 20,24,25,31,32,33,34,38,39 |
 | 41 | `41-mobile-scaffold-i18n.md` | `apps/mobile` Expo scaffold + i18n | M | 03,20 |
 | 42 | `42-mobile-auth-and-device-link.md` | Mobile auth: login, QR link, PIN lock | L | 41,09 |
-| 43 | `43-mobile-rooms-and-chat.md` | Mobile rooms + chat (WS, receipts) | L | 42,16 |
+| 43 | `43-mobile-rooms-and-chat.md` | Mobile rooms + chat (WS, receipts) | L | 16,22,42 |
 | 44 | `44-mobile-image-share.md` | Mobile image share | M | 43,18 |
 | 45 | `45-mobile-board.md` | Mobile bulletin board | M | 42,19 |
 | 46 | `46-mobile-push-and-deeplinks.md` | Mobile push (Expo) + deep links | L | 43,37 |

@@ -21,7 +21,11 @@ implementing sessions directly — a well-documented, small pattern.
   code (10-min TTL); the child device redeems it for a long-lived (180-day
   sliding) revocable device session. Optional 4–6 digit PIN acts as a local
   app lock (sibling deterrence), explicitly not a security boundary; the
-  guardian's device-revocation power is the boundary.
+  guardian's device-revocation power is the boundary. Because the PIN is a
+  deterrent rather than a boundary, offline behavior favors availability:
+  the mobile app verifies the PIN server-side when online and accepts a
+  cached successful verification for up to 24 h when offline (the
+  "offline grace rule"); a revoked device stays revoked regardless.
 - No OAuth/social login in any version: it would link children's accounts to
   external identity graphs, contradicting the closed-network principle.
 

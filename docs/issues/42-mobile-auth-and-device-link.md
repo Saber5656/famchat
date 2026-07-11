@@ -35,24 +35,32 @@ biometrics (v2).
    client: 'mobile'|'device_link', userId }`; exposed as the interface 41
    defined; cleared on logout/revocation.
 4. Child link screen: camera QR scan (`expo-camera` barcode scanning,
-   permission-gated with friendly fallback) parsing the link URL format
-   from 09 (`…/link?c=<code>&s=<spaceId>`), plus manual 6-digit entry
-   (large numeric keypad UI); calls `auth.childLink({ client:
-   'mobile' })`; success → celebratory screen (child register) → app;
-   failures friendly per 20's copy (expired → ask guardian for a new
-   code); camera permission denial → manual entry emphasized.
+   permission-gated with friendly fallback) parsing the canonical
+   **fragment** URL format from 09/DESIGN §6.2
+   (`…/link#c=<code>&s=<spaceId>` — parse the fragment, never emit the
+   code into any query string or log; unit-test the parser with
+   fragment, legacy-query rejection, and malformed inputs), plus manual
+   6-digit entry (large numeric keypad UI); calls
+   `auth.childLink({ code, client: 'mobile' })` (code alone suffices per
+   09); success → celebratory screen (child register) → app; failures
+   friendly per 20's copy (expired → ask guardian for a new code);
+   camera permission denial → manual entry emphasized.
 5. Session bootstrap: on app start, token present → `auth.me` →
    route to app (kid mode per role) or auth on 401; splash held until
    resolution (expo-splash-screen).
-6. PIN lock: if `me` indicates the child has a PIN set (children.list
-   exposes to guardians; for the child's own session add `hasPin` to
-   `auth.me` DTO — small API addition in this issue): lock overlay on
-   cold start and on returning from background after > 5 min
-   (AppState listener); 4–6 digit pad; verify via `auth.verifyChildPin`
-   (rate-limited per 09); offline/unreachable → allow if last successful
-   verify < 24 h (timestamp in SecureStore; ADR-008 grace rule);
-   guardian-reset messaging on repeated failure ("おうちの人に きいて
-   ね").
+6. PIN lock: `auth.me` gains `hasPin: boolean` for child sessions — an
+   API addition made in this issue: extend the me DTO schema in
+   `packages/shared/src/api/auth.ts`, populate from
+   `child_settings.pin_hash IS NOT NULL`, and add an api test for both
+   states. Lock overlay on cold start and on returning from background
+   after > 5 min (AppState listener); 4–6 digit pad; verify via
+   `auth.verifyChildPin` (rate-limited per 09); offline/unreachable →
+   allow if last successful verify < 24 h (timestamp in SecureStore —
+   the **offline grace rule defined in ADR-008**, which this issue's
+   sibling ADR update records: PIN is a sibling deterrent, not a
+   security boundary, so availability wins offline; revocation remains
+   the boundary); guardian-reset messaging on repeated failure
+   ("おうちの人に きいて ね").
 7. Invite deep link: `famchat://invite?code=…` and universal
    `${APP_BASE_URL}/invite/<code>` (route config now; OS association
    files in 48) → preview screen (08 API) → logged-in accept, or
@@ -81,7 +89,10 @@ biometrics (v2).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/mobile test -- --grep auth
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/shared test
+pnpm --filter @famchat/api test -- -t "auth.me"
+pnpm --filter @famchat/mobile test -- -t auth
 # manual: device checklist (QR link, PIN, revocation from guardian console)
 ```
 

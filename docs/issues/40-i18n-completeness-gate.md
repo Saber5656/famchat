@@ -28,26 +28,35 @@ same package), translation of docs/ (55/56 own their bilingual docs).
    a. **Parity**: every key present in ja exists in en and vice versa,
       per namespace; values non-empty; placeholder tokens (`{{name}}`)
       identical across locales.
-   b. **Usage**: extract referenced keys from `apps/web`, `apps/mobile`,
-      `apps/api`, `apps/worker` sources via `i18next-parser` config
-      (`t('ns:key')`, `<Trans>`, server `i18n.t`) → fail on referenced-
-      but-missing; warn-list unused keys (fail only in `--strict`, used
-      by CI on `main`).
+   b. **Usage**: extract referenced keys from `apps/web`, `apps/api`,
+      `apps/worker` — and `apps/mobile` when the directory exists (skip
+      with a logged notice otherwise; issue 41 creates it later and the
+      glob picks it up with no checker change) — via `i18next-parser`
+      config (`t('ns:key')`, `<Trans>`, server `i18n.t`) → fail on
+      referenced-but-missing; warn-list unused keys (fail only in
+      `--strict`).
    c. **Child furigana coverage**: for keys under any `*.child.*` path or
-      namespaces `safety`, `chat.child`: ja values containing kanji above
-      the grade-2 list (embed the jōyō grade-1/2 kanji allowlist in the
-      script) must use `漢字|かんじ` ruby markup — fail listing
-      offenders.
+      namespaces `safety`, `chat.child`: ja values containing any kanji
+      NOT in the embedded allowlist must use `漢字|かんじ` ruby markup —
+      fail listing offenders. The allowlist is the MEXT 学年別漢字配当表
+      grades 1–2 set (80 + 160 = exactly 240 characters), embedded as a
+      const string in the script with a unit test asserting
+      `allowlist.length === 240` (source: 学習指導要領 別表; copy the
+      standard published list verbatim).
    d. Output machine-readable JSON + human table; exit codes distinct
       per failure class.
-2. CI: add `pnpm i18n:check` to the 01 workflow (and keep in 51's
-   pipeline); root script wiring.
+2. CI commands (exact): PRs run `pnpm i18n:check` (parity + missing-key
+   failures; unused keys warn); pushes to `main` run
+   `pnpm i18n:check --strict` (unused keys also fail). Wire into the 01
+   workflow now; 51 inherits.
 3. Shared `Intl` helpers in `packages/i18n/src/format.ts`:
-   `formatDate(d, locale, tz)`, `formatTime`, `relativeTime(d, locale,
-   now)` ("さっき/3分前/昨日" vs "just now/3m ago/yesterday" — rule table
-   documented + unit-tested per locale, DST-safe), `formatBytes(locale)`;
-   refactor web call sites (21/22/24/31) onto them (mobile does so in
-   41+).
+   `formatDate(d, locale, tz)`, `formatTime(d, locale, tz)`,
+   `relativeTime(d, locale, now)` ("さっき/3分前/昨日" vs "just now/3m
+   ago/yesterday" — rule table documented + unit-tested per locale,
+   DST-safe), `formatBytes(bytes: number, locale): string` (binary
+   units B/KB/MB/GB, 1 decimal place ≥ KB, `Intl.NumberFormat` for the
+   numeral — e.g. ja `1.5 MB`, table-tested); refactor web call sites
+   (21/22/24/31) onto them (mobile does so in 41+).
 4. Locale switcher polish (20's basic toggle → final): settings radio
    (25) + auth-screen footer switcher (pre-login, cookie-persisted);
    switching re-renders notification feed rows correctly (39's
@@ -81,8 +90,9 @@ node scripts/check-i18n.mjs --self-test
 
 ## Dependencies
 
-20 (i18n foundation + existing strings), 37/39 (notification catalogs to
-check).
+20 (i18n foundation), and the string-producing web issues this gate
+trues up: 24, 25, 31, 32, 33, 34, 38, 39 (per the ISSUE_PLAN table —
+this issue runs at the end of wave 4).
 
 ## Non-goals
 

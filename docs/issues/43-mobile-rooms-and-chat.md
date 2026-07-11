@@ -27,10 +27,17 @@ screen + guardian tab (47).
 1. Socket module `src/lib/socket.ts`: socket.io-client with
    `auth: { token }` from the token store; connect on app foreground
    with an authed session, disconnect on background (AppState) after
-   30 s grace; on reconnect run the §9.3 contract (invalidate rooms
-   list + notifications, refetch open room since newest known id);
+   30 s grace; on reconnect run the §9.3 contract exactly as 22
+   specifies it (invalidate rooms list + notifications; for the open
+   room fetch the newest page and merge-or-reset on gap);
    `session.revoked` → 42's wipe flow; expose `useSocketEvent(event,
-   handler)` hook mirroring web's API (22) for cache patching.
+   handler)` hook mirroring web's API (22) for cache patching. **Room
+   subscription lifecycle (DESIGN §9.1)**: the chat screen emits
+   `subscribeRoom { spaceId, roomId }` on mount/focus and
+   `unsubscribeRoom` on unmount/blur, handling the ack — `ok:false`
+   with `QUIET_HOURS_ACTIVE` triggers the quiet placeholder (req 6b),
+   other ack errors show the localized error state; re-subscribe after
+   every reconnect.
 2. Rooms tab: sectioned list (family pinned, active by last activity,
    archived collapsed) with the same row anatomy as 21 (name resolution,
    preview redaction rules, unread badge, notify-off icon, observer
@@ -46,6 +53,10 @@ screen + guardian tab (47).
    send with dedupeId + retry/discard, `QUIET_HOURS_ACTIVE` and
    `CONTENT_BLOCKED_NG_WORD` mapped errors); keyboard handling
    (KeyboardAvoidingView, list maintains position).
+3b. Delete flows (parity with 22 §4b): long-press action sheet with
+   "delete" on own messages (all roles) and on any message for
+   guardians incl. observer mode; confirm sheet (child-register variant
+   for children); tombstone renders for everyone via `message.deleted`.
 4. Receipts: read-by chips per 22's compact spec; markRead triggers —
    screen focused at bottom, new message while at bottom, screen focus
    event; never while scrolled up.
@@ -54,6 +65,12 @@ screen + guardian tab (47).
 6. Offline UX: banner when disconnected (NetInfo), sends fail fast with
    retry affordance (no outbox queue in v1 — documented limitation
    matching DESIGN §2.2).
+6b. Quiet-hours interim handling (until 47's full lock screen): any
+   `QUIET_HOURS_ACTIVE` error or `quietHours.state {active:true}` event
+   hides all room/board content and renders a simple full-screen
+   placeholder (moon emoji + localized "おやすみ じかん" + unlock time
+   from `until`) that 47 replaces with the final lock screen — content
+   must never remain visible behind it (`TODO(issue-47)` marker).
 7. Tests: unit — socket lifecycle state machine (foreground/background/
    revoked transitions with mocked AppState), markRead trigger logic;
    component — bubble variants, composer counter + IME-safe submit (RN:
@@ -74,13 +91,17 @@ screen + guardian tab (47).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/mobile test -- --grep "rooms|chat|socket"
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/mobile test -- -t rooms
+pnpm --filter @famchat/mobile test -- -t chat
+pnpm --filter @famchat/mobile test -- -t socket
 # manual: two-device checklist incl. background recovery
 ```
 
 ## Dependencies
 
-42 (auth/session), 16 (receipts API), 15. Reference: 22.
+16 (receipts API), 22 (reference interaction contract — hard dependency;
+this issue reuses its specs verbatim), 42 (auth/session).
 
 ## Non-goals
 

@@ -33,22 +33,35 @@ queue (v1 non-goal — offline shell only).
    supporting browsers).
 2. Service worker `apps/web/public/sw.js` (plain JS, no bundler magic):
    `push` event → parse `{ title, body, link, tag }` → `showNotification`
-   (tag-based collapse per room); `notificationclick` → focus existing
-   client + navigate to `link` or `openWindow`; minimal offline shell:
+   (tag-based collapse per room); `notificationclick` → **normalize
+   `link` before any navigation: it must be a same-origin relative app
+   route matching `^/(s/|notifications|settings)` — anything else falls
+   back to `/`** (payloads are server-composed but defense-in-depth per
+   DESIGN §19) → focus existing client + navigate or `openWindow`;
+   minimal offline shell:
    cache the app shell route + an `/offline` page (network-first,
    fallback), **no API caching** (`no-store` posture from 12); SW
    versioning + `skipWaiting`/`clientsClaim` update flow with an in-app
    "update available" toast.
-3. Subscribe flow: `lib/push.ts` — feature-detect (`PushManager` in SW
-   registration); iOS-not-installed detection (`'standalone' in
-   navigator && !navigator.standalone` heuristic + UA) → show the
-   localized install guide sheet (step-by-step share-sheet instructions
-   per research doc) instead of a dead permission prompt; permission
-   request only from explicit user action (settings toggle or the
-   engagement prompt after first sent message — never on load);
+3. Subscribe flow: `apps/web/src/lib/push.ts` — feature-detect
+   (`PushManager` in SW registration); iOS-not-installed detection
+   (`'standalone' in navigator && !navigator.standalone` heuristic + UA)
+   → show the localized install guide sheet (step-by-step share-sheet
+   instructions per research doc) instead of a dead permission prompt;
+   permission request only from explicit user action (settings toggle or
+   the engagement prompt after first sent message — never on load);
    `pushManager.subscribe({ userVisibleOnly: true, applicationServerKey:
-   NEXT_PUBLIC_VAPID_PUBLIC_KEY })` → `notifications.registerPush({ kind:
-   'webpush', … })`; unsubscribe symmetric.
+   urlBase64ToUint8Array(NEXT_PUBLIC_VAPID_PUBLIC_KEY) })` (include the
+   standard base64url→Uint8Array helper) →
+   `notifications.registerPush({ kind: 'webpush', … })`; unsubscribe
+   symmetric.
+3b. **Endpoint validation (server side, in 37's registerPush webpush
+   branch — specified here with the transport)**: the subscription
+   endpoint must be an `https:` URL whose host is a DNS name (reject IP
+   literals, `localhost`, `.local`/`.internal` suffixes) and the
+   payload keys (p256dh/auth) must be valid base64url of the expected
+   lengths — the worker only ever POSTs to stored, validated endpoints
+   (DESIGN §19.2 push-egress boundary; hostile-endpoint test included).
 4. Settings integration (25): push card — status (on/off/unsupported/
    needs-install), toggle, per-device note; child sessions: push allowed
    (device is family-managed) but copy mentions guardian visibility of
@@ -84,8 +97,12 @@ queue (v1 non-goal — offline shell only).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/web test -- --grep push
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/web test -- -t push
+pnpm --filter @famchat/worker test -- -t webpush
+pnpm --filter @famchat/api test -- -t registerPush
 pnpm --filter @famchat/web exec playwright test --grep @push
+npx lighthouse http://localhost:3000 --only-categories=pwa --chrome-flags="--headless"  # installability
 # manual: docs/ops/webpush-checklist.md
 ```
 
