@@ -33,21 +33,28 @@ marketing/README rewrite (57).
    note); upgrade (pointer to ops/deploy.md); backup enablement
    (pointer to ops/backup.md, cron lines); security baseline for the
    host (SSH keys-only, ufw allow 80/443, unattended-upgrades — the
-   §19.2 "SSH hardening documented" row); uninstall/data-removal.
+   §19.2 "SSH hardening documented" row); **secret file hygiene** per
+   §19.6 (`.env` chmod 600 in an owner-only directory; secrets excluded
+   from backups by design and stored separately, e.g. a password
+   manager); uninstall/data-removal.
 2. `docs/ja/selfhost.md`: full Japanese translation (not a summary).
    Parity enforcement: do NOT reuse the 40 catalog checker (that is for
-   UI strings); add a lightweight `scripts/check-docs-parity.mjs`
-   comparing heading structures of en/ja doc pairs (selfhost + the two
-   56 legal pairs) — heading-count/anchor parity only; content drift
-   is caught by human review.
+   UI strings); add `scripts/check-docs-parity.mjs` — a **generic**
+   heading-structure comparator driven by a pair-registry config
+   (`docs/.docs-pairs.json`); this issue registers the selfhost pair
+   only, and issue 56 registers its three legal pairs in the same
+   config (heading-count/anchor parity only; content drift is caught
+   by human review).
 3. Operator quickstart `docs/ops/quickstart.md`: the closed-beta
    operator's day-1: mint invite → onboard guardian → guardian
-   assembles family (link to a family-facing quick guide section with
-   QR/link screenshots from the 52 demo) → where to watch (stats,
-   audit tail, backup logs).
+   assembles family → where to watch (stats, audit tail, backup logs).
+   The family-facing quick guide is a section inside quickstart.md
+   with screenshots committed to `docs/assets/quickstart/*.png`,
+   captured per 52's screenshot recipe (paths referenced relatively so
+   they render on GitHub).
 4. Consolidate `docs/ops/`: index README; ensure `deploy.md` (49),
-   `backup.md`/`restore.md` (50), `admin.md` (35), `webpush-checklist
-   .md` (38), `heic.md` (18) exist and cross-link; write the missing
+   `backup.md`/`restore.md` (50), `admin.md` (35),
+   `webpush-checklist.md` (38), `heic.md` (18) exist and cross-link; write the missing
    `upgrade.md` (tag bump walkthrough + migration caveat) and
    `troubleshooting.md` (cert issuance, 502s, WS drops behind
    proxies, disk full, queue stuck — each: symptom/diagnosis/fix) and
@@ -84,7 +91,8 @@ node scripts/check-docs-parity.mjs
 
 ## Dependencies
 
-49, 50, 35 (content sources), 52 (screenshots).
+35, 49, 50 (content sources), 51 (CI wiring for docs:check), 52
+(screenshots).
 
 ## Non-goals
 

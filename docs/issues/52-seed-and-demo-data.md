@@ -22,13 +22,26 @@ data generation (v2).
 
 ## Detailed Requirements
 
-1. Guard: seed refuses to run when `NODE_ENV=production` or the DB has
-   any real space (row count > seed-known ids) unless `--force-reset`;
-   `--force-reset` truncates all app tables first (dev convenience).
-2. Deterministic IDs: a seeded ULID factory (fixed timestamp base +
-   counter) exported as `SEED_IDS` (typed constants: `SEED_IDS.space`,
-   `.guardianMom`, `.roomFamily`, `.flaggedMessage`, …) — importable by
-   E2E specs (53) and dev tools.
+1. Guard (exact rules): `NODE_ENV=production` ⇒ hard refusal, no
+   override flag exists. Otherwise: if the DB contains ANY row in any
+   app table, the seed aborts unless `--force-reset` is passed;
+   `--force-reset` truncates all app tables first. There is no
+   "detect real data" heuristic — non-empty means abort-or-reset,
+   period.
+2. Identity strategy: guardian/adult accounts and the space are
+   created with **deterministic credentials** (table below) via the
+   service layer; because services generate their own ULIDs, the seed
+   writes every created id into `packages/db/seed-output.json`
+   (`{ spaceId, users: {mom,dad,grandma,uncle,haruto,hinata}, rooms:
+   {family,siblings,…}, flaggedMessageId, openReportId, inviteCode,
+   instanceInviteCode, … }`) — exported helper `loadSeedOutput()` is
+   what 53's E2E and dev tools consume (no compile-time id constants).
+   Deterministic credentials: mom `mom@example.famchat` / dad
+   `dad@example.famchat` / grandma `grandma@example.famchat` / uncle
+   `uncle@example.famchat`, all password `famchat-demo-1234!`
+   (dev-only, printed with a warning); ひなた's PIN `1234`. Child
+   sessions are NOT pre-seeded — E2E creates a link code via the
+   guardian API and redeems it (the real flow).
 3. Demo family (mode `--demo`, ja-default with en variants where
    noted):
    - Space 佐藤ファミリー (Asia/Tokyo, mode flag, both builtin lists
@@ -49,11 +62,12 @@ data generation (v2).
      images, 1 en post from uncle) + comments.
    - Safety: the flagged message's moderation_hit (pending), 1 open
      report (ひなた reported a message, reason `unkind`), 1 resolved
-     report; audit trail consistent with all the above (seed writes
-     through services where practical — **requirement: seed calls the
-     real service layer, not raw inserts, wherever a service exists**,
-     so invariants/audit stay true; raw inserts only for timestamp
-     control, documented per call site).
+     report; audit trail consistent with all the above. **Service-layer
+     rule**: every safety-state row (flag, report, quiet hours,
+     memberships, invites) is created through the real services so
+     invariants/audit stay true; the ONLY sanctioned raw-insert path is
+     the bulk chat-history messages (for timestamp control), documented
+     at its single call site.
    - Notifications: derived naturally from the service-layer calls;
      Web push subscriptions: none (device-specific).
    - One instance invite (unused) + one space invite (active) for
@@ -65,38 +79,43 @@ data generation (v2).
    the fixture and its generator both committed) reused by 18/23
    tests.
 5. `--e2e` mode: demo minus bulky history (20 messages) for fast CI
-   setup; same `SEED_IDS`.
-6. `pnpm db:seed --demo|--e2e [--force-reset]` root wiring; runs the
-   17/18 pipeline for fixture images through MinIO when services are up
-   (skip-with-warning otherwise: image rows seeded as `ready` with
-   pre-processed variants uploaded directly — both paths implemented).
-7. Docs: `docs/dev/seed.md` — personas table, SEED_IDS reference,
-   modes, reset warnings, screenshot recipe (`pnpm db:seed --demo` +
-   URLs to visit).
+   setup; same `seed-output.json` contract.
+6. `pnpm db:seed --demo|--e2e [--force-reset]` root wiring; fixture
+   images run through the real 17/18 pipeline (the seed asserts
+   S3/Redis reachability first). If media services are unreachable the
+   seed **skips image content entirely** (affected messages/posts
+   become text-only, one warning per skip) — no fake-`ready` rows and
+   no dangling media references, ever.
+7. Docs: `docs/dev/seed.md` — personas + credentials table,
+   `loadSeedOutput()` reference, modes, reset warnings, screenshot
+   recipe (`pnpm db:seed --demo` + URLs to visit).
 8. Tests: seed runs idempotently twice with `--force-reset`; guard
-   blocks production/real-data runs; SEED_IDS resolve to rows; the
-   flagged message actually trips 27's pipeline when seeded via
-   services (assert hit row exists).
+   blocks production and non-empty-without-flag runs;
+   `seed-output.json` ids all resolve to live rows (via
+   `loadSeedOutput()`); the flagged message actually trips 27's
+   pipeline when seeded via services (assert hit row exists);
+   media-services-down path seeds clean text-only data.
 
 ## Acceptance Criteria
 
 - [ ] One command yields the full demo family with all safety states
       visible in web UI (manual walkthrough + screenshots in PR).
-- [ ] E2E mode + SEED_IDS consumed by at least one converted test in
-      this PR (proof of stability).
+- [ ] `--e2e` mode + `loadSeedOutput()` consumed by a seed-level
+      integration test in this PR (53 owns the E2E suite itself).
 - [ ] Production guard proven by test.
 - [ ] Fixture provenance documented; GPS fixture generated in-repo.
 
 ## Validation
 
 ```bash
+pnpm -w typecheck && pnpm -w lint
 pnpm db:seed --demo --force-reset && pnpm db:seed --e2e --force-reset
-pnpm --filter @famchat/db test -- --grep seed
+pnpm --filter @famchat/db test -- -t seed
 ```
 
 ## Dependencies
 
-27, 29, 19 (services the seed drives), 18 (image path), 04.
+04, 18 (image path), 19, 27, 28, 29 (services the seed drives).
 
 ## Non-goals
 

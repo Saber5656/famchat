@@ -19,18 +19,25 @@ In scope: checklist doc, automated verification scripts, manual
 verification passes, fixes for findings (in-scope severity: all high/
 critical, medium by judgment), sign-off record.
 Out of scope: external pentest (v2), bug bounty, COPPA/GDPR assessment
-(v2 gate), SECURITY.md text (57 — verified here as present-by-then or
-stubbed).
+(v2 gate), SECURITY.md (entirely issue 57's — this gate neither
+creates nor verifies it).
 
 ## Detailed Requirements
 
-1. `docs/security/checklist.md`: one row per control from DESIGN
-   §19.2 (boundary controls), §19.3 (abuse cases), §19.4 (headers/
-   cookies/CSP), §19.5 (limits/quotas), §19.6 (secrets) — columns:
-   control, verification method (test id / script / manual step),
-   evidence link, status, owner-visible risk note for accepted
-   residuals. Every row must land on pass / fixed / accepted-with-
-   rationale.
+1. Control inventory + checklist: first author
+   `docs/security/controls.json` — a manually curated array
+   `[{ id: "S19.2-01", section: "19.2", control: "...", … }]`
+   transcribing every control row of DESIGN §19.2 (boundary controls),
+   §19.3 (abuse cases), §19.4 (headers/cookies/CSP), §19.5
+   (limits/quotas), §19.6 (secrets) with stable ids (the human
+   transcription IS the counting rule — no prose parsing); then
+   `docs/security/checklist.md` has exactly one row per inventory id —
+   columns: control, verification method (test id / script / manual
+   step), evidence link, status, owner-visible risk note for accepted
+   residuals. `scripts/check-security-coverage.mjs` cross-counts
+   inventory ids vs checklist rows (and vs the tenant-coverage walker
+   below). Every row must land on pass / fixed /
+   accepted-with-rationale.
 2. Automated verifiers (added to repo, runnable anytime):
    - `scripts/check-headers.sh`: curl assertions against the e2e stack
      — CSP exact-match on web routes, HSTS, nosniff, Referrer-Policy,
@@ -67,10 +74,16 @@ stubbed).
      absent; add redaction fixes if found).
    - Push payload review: locked-child suppression, flagged-content
      notifications term-free.
-4. Findings workflow: each finding → fix in this issue if ≤ 1 day,
-   else a new numbered issue (ISSUE_PLAN §8 known-unknown process) —
-   zero open high/critical to pass the gate; the checklist records
-   the decision trail.
+4. Findings workflow — severity rubric (mechanical): **High** =
+   authz/tenant-isolation bypass, content or secret exposure, auth
+   weakness (fix in this issue, gate-blocking); **Medium** = hardening
+   gap with compensating controls (fix here if the fix touches ≤ 2
+   files, else file a follow-up issue); **Low** = defense-in-depth nit
+   (file or accept with rationale). Every finding is recorded in the
+   checklist row with fields `{ id, control, finding, severity,
+   evidence, resolution: fixed@<commit> | issue docs/issues/NN-*.md |
+   accepted:<rationale> }`; follow-up issues use the next free NN and
+   are added to ISSUE_PLAN §2 + §8. Zero open High to pass the gate.
 5. Sign-off: PR description includes the completed checklist summary
    table; owner review/approval of the PR constitutes the gate record
    (referenced by 57's release checklist).
@@ -89,9 +102,14 @@ stubbed).
 ## Validation
 
 ```bash
-bash scripts/check-headers.sh https://localhost
-pnpm --filter @famchat/api test -- --grep @tenant
+bash scripts/check-headers.sh --base https://localhost --insecure  # internal-TLS stack (script flag maps to curl -k)
+pnpm --filter @famchat/api test -- -t @tenant
+pnpm --filter @famchat/api test -- -t @upload-abuse
+pnpm --filter @famchat/api test -- -t @auth-pack
+pnpm --filter @famchat/api test -- -t @csrf-cors
 node scripts/check-security-coverage.mjs
+gitleaks detect --source . && pnpm audit --prod --audit-level high
+# manual evidence (logs review, push payloads, VPS port scan) recorded per checklist row
 ```
 
 ## Dependencies

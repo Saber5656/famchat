@@ -20,23 +20,30 @@ images per message (design: one), editing/filters (never).
 
 ## Detailed Requirements
 
-1. Uploader port `src/lib/uploads.ts`: same state machine + polling
-   contract as 23 (`picking → requesting → uploading(pct) → processing →
-   ready | failed(reason)`); upload via `expo-file-system`
-   `uploadAsync` (or fetch with FormData PUT — must send raw bytes, not
-   multipart: use `uploadAsync` with `httpMethod: 'PUT'`, binary body)
-   honoring the presigned URL + content-type; progress events wired to
-   UI; shared constants from `@famchat/shared/limits`.
+1. Uploader port `apps/mobile/src/lib/uploads.ts`: same state machine +
+   polling contract as 23 — the state-machine test fixture table is
+   shared: 23 exports it from
+   `packages/shared/src/testing/upload-fixtures.ts` and this issue's
+   unit tests consume the same table (parity by construction). Upload
+   transport — exactly one sanctioned path:
+   `FileSystem.uploadAsync(putUrl, fileUri, { httpMethod: 'PUT',
+   uploadType: FileSystemUploadType.BINARY_CONTENT, headers:
+   { 'Content-Type': mime } })` (raw bytes; never fetch/FormData/
+   multipart); progress via the task's progress callback; shared
+   constants from `@famchat/shared/limits`.
 2. Composer attach: image button → action sheet (library / camera);
    `expo-image-picker` with permissions flows (denied → settings-link
    guidance, localized); preview thumb with remove + caption (500 cap);
    send gated on `ready`; optimistic bubble with local URI.
-3. HEIC handling: request `expo-image-picker` with
-   `mediaTypes: images`; if the instance rejects HEIC (18 capability →
-   specific error code), retry path: re-pick with picker-side conversion
-   (`allowsEditing:false, quality:1` exports JPEG on iOS when
-   `exif:false` — if conversion unavailable, show the localized guidance
-   from 23's HEIC copy). Never silently fail.
+3. HEIC handling — exact contract: when `attachments.requestUpload`
+   rejects with `UPLOAD_TYPE_UNSUPPORTED` +
+   `details.reason === 'heic_unavailable'` (17/18's capability
+   contract), the client converts locally and retries once:
+   `ImageManipulator.manipulateAsync(uri, [], { format:
+   SaveFormat.JPEG, compress: 0.92 })` → re-run requestUpload with
+   `image/jpeg` and the new size. Conversion failure → 23's localized
+   HEIC guidance copy. Never silently fail; unit-test the
+   detect→convert→retry state transitions with the error fixture.
 4. Rendering: bubbles use `/media/<id>/thumb` via expo-image (blurhash-
    free; width/height-based placeholder), tap → lightbox modal
    (`/media/full`, pinch-zoom via `react-native-gesture-handler` +
@@ -51,10 +58,14 @@ images per message (design: one), editing/filters (never).
    verified in test).
 6. Error states: full 23 matrix localized (too large, type, quota,
    rejected reasons, timeout-recover, offline).
-7. Tests: unit — state machine port parity (shared fixture table with
-   23), mediaSource header logic; manual device checklist: camera shot
-   (iPhone HEIC path) → appears on web client sanitized; library pick on
-   Android; lightbox gestures; permission-denied flows both platforms.
+7. Tests: unit — state machine parity via the shared fixture table
+   (req 1), HEIC detect→convert→retry, mediaSource header logic;
+   component test — image bubble renders through a mocked `/media` 302
+   (assert the auth header on the first hop and that the redirect is
+   followed); manual device checklist: camera shot (iPhone HEIC path) →
+   appears on web client sanitized; library pick on Android;
+   authenticated `/media` render on a real device; lightbox gestures;
+   permission-denied flows both platforms.
 
 ## Acceptance Criteria
 
@@ -68,8 +79,9 @@ images per message (design: one), editing/filters (never).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/mobile test -- --grep upload
-# manual: device checklist (HEIC camera, Android library, lightbox, permissions)
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/mobile test -- -t upload
+# manual: device checklist (HEIC camera, Android library, /media render, lightbox, permissions)
 ```
 
 ## Dependencies

@@ -26,7 +26,7 @@ list + read, reusing 39's renderer rules).
 
 ## Detailed Requirements
 
-1. Registration (`src/lib/push.ts`): prompt strategy — never on first
+1. Registration (`apps/mobile/src/lib/push.ts`): prompt strategy — never on first
    launch; after the user's first successful message send (engagement
    gate per DESIGN §17), show a friendly pre-prompt sheet (ja/en,
    child-register for child sessions) then the OS permission;
@@ -35,24 +35,32 @@ list + read, reusing 39's renderer rules).
    (tokens rotate); unregister on logout/revocation (42's wipe hook);
    Android notification channel setup (`default`, importance high) +
    iOS foreground presentation options.
-2. Worker transport: register `expo` in 37's dispatch registry using
-   `expo-server-sdk`: validate token format, chunk sends (SDK
-   chunking), map rendered `{ title, body, link }` → message
-   (`data: { link }`, `sound: 'default'`, `badge` from recipient's
-   unread aggregate — computed via 37's unreadCounts helper);
-   `DeviceNotRegistered` ⇒ disable subscription; store tickets and run
-   a `expo-receipts` BullMQ job 15 min later resolving receipt errors
-   (same disable rules); absent `EXPO_ACCESS_TOKEN` ⇒ transport not
-   registered + `registerPush(expo)` returns `VALIDATION_FAILED
-   details.push_disabled` (mirror of 38's degradation).
-3. Deep links: notification tap (`expo-notifications` response
-   listener) + cold-start last-response → route by `link` using the
-   same app-route shapes as web (`/s/<sid>/r/<rid>?m=<mid>`,
-   `/s/<sid>/board/<postId>`, `/notifications`) via an expo-router
-   `routeFromLink(link)` mapper (unit-tested table incl. unknown-link
-   fallback to Rooms); OS-level universal/app links config (associated
-   domains / intent filters) declared in `app.config.ts` but activation
-   documented as part of 48 (needs owned domain files).
+2. Worker transport (files: `apps/worker/src/jobs/expo-push.ts` +
+   `apps/worker/src/jobs/expo-receipts.ts`): register `expo` in 37's
+   dispatch registry using `expo-server-sdk`: validate token format,
+   chunk sends (SDK chunking), map rendered `{ title, body, link }` →
+   message (`data: { link }`, `sound: 'default'`, `badge` from
+   recipient's unread aggregate — computed via 37's unreadCounts
+   helper); `DeviceNotRegistered` ⇒ disable subscription; store tickets
+   and run the `expo-receipts` BullMQ job 15 min later resolving
+   receipt errors (same disable rules). **Capability signaling (mirrors
+   18's HEIC pattern)**: on boot the worker writes Redis `caps:expo_push`
+   = `"1"` iff `EXPO_ACCESS_TOKEN` is set else `"0"`; the api's
+   `registerPush(expo)` consults the key (60 s in-process cache;
+   missing/`"0"` ⇒ `VALIDATION_FAILED details.push_disabled` — the
+   worker-only env never leaks to the api, DESIGN §3.4).
+3. Deep links (`apps/mobile/src/lib/routeFromLink.ts`): notification tap
+   (`expo-notifications` response listener) + cold-start last-response →
+   route by `link` using the same app-route shapes as web
+   (`/s/<sid>/r/<rid>?m=<mid>`, `/s/<sid>/board/<postId>`,
+   `/notifications`). `routeFromLink(link)` hardening: accept only
+   relative paths matching the app-route table after percent-decoding
+   (reject absolute URLs, any scheme, `..` segments, backslashes);
+   routes into a space the user has no membership in fall back to the
+   Rooms tab — unit-tested table incl. hostile inputs. OS-level
+   universal/app-link configuration (associated domains, intent
+   filters, well-known files) is **entirely issue 48's** — this issue
+   only handles in-app routing.
 4. Foreground behavior: notifications received while the relevant room
    is open and focused are suppressed (no banner — the message arrives
    via WS); other rooms → in-app banner (expo-notifications foreground
@@ -84,14 +92,18 @@ list + read, reusing 39's renderer rules).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/mobile test -- --grep push
-pnpm --filter @famchat/worker test -- --grep expo
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/mobile test -- -t push
+pnpm --filter @famchat/mobile test -- -t routeFromLink
+pnpm --filter @famchat/worker test -- -t expo
+pnpm --filter @famchat/api test -- -t "registerPush"
 # manual: two-platform device checklist
 ```
 
 ## Dependencies
 
-43 (app flows), 37 (framework). Credentials/builds finalized in 48.
+37 (framework), 39 (feed renderer rules reused by the minimal
+notifications tab), 43 (app flows). Credentials/builds finalized in 48.
 
 ## Non-goals
 

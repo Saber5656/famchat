@@ -34,6 +34,13 @@ dialog), notifications (46), web (24).
    all-ready; edit mode text-only per 19.
 4. Realtime: `board.postCreated` / `board.commentCreated` via the 43
    socket hook → cache patches; reconnect invalidation.
+4b. Quiet hours: child board mutations may return `QUIET_HOURS_ACTIVE`
+   (29 gates all `board.*`) — handle exactly like 43's req 6b (interim
+   full-screen placeholder; 47 replaces with the lock screen).
+4c. Text policy (DESIGN §19.3, parity with 24 §6b): titles/bodies/
+   comments render as plain text with preserved newlines only — no
+   HTML/Markdown, no linkification for children; hostile-fixture
+   component test included.
 5. Presentation: base type scale bumped on this tab (grandparent
    consideration — 17 pt body minimum adult mode; kid mode inherits
    larger); date display absolute + relative per 40 helpers.
@@ -56,13 +63,15 @@ dialog), notifications (46), web (24).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/mobile test -- --grep board
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/mobile test -- -t board
 # manual: device↔web board checklist
 ```
 
 ## Dependencies
 
-42 (auth), 44 (uploader), 19 (API). Reference: 24.
+19 (API), 43 (socket hook + quiet-hours interim handling), 44
+(uploader). Reference: 24.
 
 ## Non-goals
 

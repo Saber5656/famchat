@@ -33,8 +33,14 @@ third-party cookies/trackers exist — documented instead).
    acceptable use (family use; no unlawful content; operator may
    suspend per policy); availability disclaimer (beta, no SLA, data
    loss best-effort against 50's backups); termination (owner may end
-   beta with 30-day notice + export window); changes to terms
-   (notice via the board/notification); governing law Japan.
+   beta with `[OWNER-CONFIRM: 30-day]` notice + export window);
+   changes to terms (notice via the board/notification); governing law
+   `[OWNER-CONFIRM: Japan]`. Operator-binding parameters — the
+   termination notice period, governing law, and the operator-access
+   disclosure window — are written as bracketed `[OWNER-CONFIRM: …]`
+   placeholders exactly like this, and the legal README's owner-review
+   checklist requires resolving every marker before beta invites go
+   out.
 2. `docs/legal/privacy.en.md` + `privacy.ja.md` (Privacy Notice),
    the honest core: what is stored (accounts, messages, images,
    logs — enumerated per DESIGN §7 in plain words); **server
@@ -54,8 +60,8 @@ third-party cookies/trackers exist — documented instead).
    endpoints exist; emergency direct-DB access only for (enumerated:
    legal obligation, imminent-harm report, critical data-integrity
    repair), logged manually in the ops log and **disclosed to the
-   affected space within 7 days**; admin actions are audited;
-   verification pointer (OSS: the code is public).
+   affected space within `[OWNER-CONFIRM: 7 days]`**; admin actions are
+   audited; verification pointer (OSS: the code is public).
 4. Every document header: version, date, and a bold "TEMPLATE — not
    legal advice; the operator must review (and ideally consult a
    professional) before production use" banner; `docs/legal/README.md`
@@ -64,7 +70,11 @@ third-party cookies/trackers exist — documented instead).
    referenced by 57's release checklist).
 5. In-product wiring:
    - Web `/legal/terms` and `/legal/privacy` routes rendering the
-     markdown (locale-matched with fallback + language toggle);
+     markdown with a **safe renderer configuration**: react-markdown
+     (or equivalent) with raw HTML disabled (no rehype-raw), external
+     links forced `rel="noopener noreferrer"` — a hostile-markdown
+     fixture (script tag + raw-HTML img) must render inert (component
+     test); locale-matched with fallback + language toggle;
      linked from: signup forms' consent checkbox labels (07/08 flows
      in 20's UI — checkbox is already required; this issue finalizes
      its copy: 「利用規約とプライバシーノートに同意します」/EN
@@ -74,11 +84,12 @@ third-party cookies/trackers exist — documented instead).
    - Consent versioning: `users.tosAcceptedAt` exists (07);
      re-consent on template change is v2 (documented in
      legal/README).
-6. Parity: the three en/ja pairs registered in 55's
-   `check-docs-parity.mjs`.
-7. Tests: web routes render both locales (component test); signup
-   E2E asserts checkbox required + timestamp stored (extend 53's
-   onboarding spec); links resolve (docs:check).
+6. Parity: this issue registers its three en/ja pairs in 55's
+   pair-registry config (`docs/.docs-pairs.json`) — the generic checker
+   needs no code change.
+7. Tests: web routes render both locales + the hostile-markdown fixture
+   (component tests); signup E2E asserts checkbox required + timestamp
+   stored (extends 53's onboarding spec); links resolve (docs:check).
 
 ## Acceptance Criteria
 
@@ -94,14 +105,18 @@ third-party cookies/trackers exist — documented instead).
 ## Validation
 
 ```bash
+pnpm -w typecheck && pnpm -w lint
+pnpm docs:check
 node scripts/check-docs-parity.mjs
+pnpm --filter @famchat/web test -- -t legal
 pnpm --filter @famchat/e2e test -- --grep onboarding
 ```
 
 ## Dependencies
 
-07/20 (consent slots), 36 (retention/deletion facts), 55 (parity
-script). Owner review is a human gate before beta invites go out.
+07/20 (consent slots), 36 (retention/deletion facts), 53 (onboarding
+E2E extended here), 55 (parity script + docs:check). Owner review is a
+human gate before beta invites go out.
 
 ## Non-goals
 

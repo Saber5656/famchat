@@ -44,11 +44,12 @@ Out of scope: backups (50), CI image publishing (51), monitoring stack
    `stream_timeout`/keepalive settings for `/ws` (resolves unknown U8 —
    record chosen values + rationale in the file); global: HSTS
    (max-age 1y) on responses, `encode zstd gzip`, access logs JSON to
-   stdout; rate limit: Caddy's built-in per-IP connection limits
-   documented (the 300/min/IP from DESIGN §19.5 implemented via the
-   `rate_limit` directive if the plugin is available in the chosen
-   image — otherwise document Fastify-only enforcement and mark the
-   deviation).
+   stdout; rate limit: the DESIGN §19.5 global `300/min/IP` is
+   **mandatory** — build a custom Caddy image (`infra/caddy/Dockerfile`,
+   xcaddy pinned by digest, `--with github.com/mholt/caddy-ratelimit`
+   pinned to a tagged version) and configure the `rate_limit` directive;
+   stock-Caddy fallback is not permitted (no silent deviation from the
+   canonical limits table).
 4. `.env.production.example`: full DESIGN §3.4 matrix with production
    guidance comments (secret generation one-liners, FAMCHAT_DOMAIN,
    FAMCHAT_TAG) — no defaults for secrets.
@@ -56,14 +57,30 @@ Out of scope: backups (50), CI image publishing (51), monitoring stack
    services; log rotation via `logging: options: max-size/max-file`;
    memory limits commented with 4 GB-VPS guidance values (DESIGN
    §18.1).
-6. `scripts/prod-smoke.sh`: from a clean VM/host with only Docker:
-   validates `.env`, `docker compose -f infra/compose.prod.yml config`
-   lints, brings the stack up with a self-signed/internal CA Caddy
-   variant (`FAMCHAT_DOMAIN=localhost` internal TLS), waits for
-   `/readyz`, runs: operator invite → space create → login → send
-   message → upload image → verify `/media` serves — via curl against
-   the API (script is the deploy acceptance test and is reused by 53's
-   E2E environment).
+6. `scripts/prod-smoke.sh` — from a clean VM/host with only Docker; the
+   script is pure curl+jq against the API (no pnpm/ops-CLI dependency;
+   the 35 admin REST endpoints are called directly with
+   `OPERATOR_TOKEN`). TLS variant selection: env `FAMCHAT_TLS_MODE`
+   (`auto` default / `internal`) consumed by the Caddyfile via an
+   `import` snippet — `internal` adds `tls internal` for
+   `FAMCHAT_DOMAIN=localhost` runs without touching production config;
+   53 reuses the same mechanism. Exact steps (each with an explicit
+   jq assertion and expected status):
+   1. `docker compose -f infra/compose.prod.yml config -q` (lint).
+   2. `up -d` → poll `GET /readyz` ≤ 120 s → `.ok == true`.
+   3. `POST /admin/v1/instance-invites` (Bearer $OPERATOR_TOKEN,
+      `{"note":"smoke"}`) → 200, capture `.code`.
+   4. tRPC `spaces.create` (curl POST `/trpc/spaces.create`) with the
+      code + `newUser {email: smoke@example.com, password: <random>,
+      displayName: Smoke, locale: en, tosAccepted: true}` → capture
+      session cookie + `spaceId`.
+   5. `rooms.list` → family room exists; `messages.sendText` → 200;
+      `messages.list` → the message round-trips.
+   6. `attachments.requestUpload` (fixture jpeg bytes from
+      `scripts/fixtures/smoke.jpg`, committed) → PUT → `finalize` →
+      poll `attachments.get` until `ready` (≤ 60 s) → GET
+      `/media/<id>/thumb` follows 302 → 200 + `image/webp`.
+   7. `docker compose down`; exit 0 only if every assertion passed.
 7. `docs/ops/deploy.md`: first deploy (DNS, ports, env, up), upgrade
    (edit FAMCHAT_TAG → pull → up -d; migrate auto-runs; observed-safe
    ordering), rollback (previous tag + the migration-rollback caveat:
@@ -92,8 +109,8 @@ bash scripts/prod-smoke.sh   # on a scratch VM
 
 ## Dependencies
 
-18 (worker image contents), 38 (web assets incl. SW), 35 (ops CLI used
-in smoke). 51 publishes the real images.
+18 (worker image contents), 35 (admin REST endpoints the smoke script
+calls), 38 (web assets incl. SW). 51 publishes the real images.
 
 ## Non-goals
 

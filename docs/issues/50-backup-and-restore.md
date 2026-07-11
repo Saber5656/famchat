@@ -23,48 +23,64 @@ export (36, user-facing).
 
 ## Detailed Requirements
 
-1. `scripts/backup.sh` (bash, `set -euo pipefail`, host-run next to the
-   compose file):
-   - `pg_dump -Fc` via `docker compose exec -T postgres` → 
-     `backups/pg/famchat-<UTC timestamp>.dump`.
-   - MinIO data: `mc mirror --overwrite` via a transient `minio/mc`
-     container → `backups/minio/` (bucket-level, preserves keys).
-   - Retention prune: keep 14 daily + 8 weekly (ISO week stamp
-     dedupe); deletes only within `backups/` (path-guard asserted).
-   - `.env` and secrets are **excluded by design** (documented: operator
-     stores secrets separately, e.g. password manager).
-   - Non-zero exit on any failure; final line `BACKUP OK <sizes>`
-     (cron mail/log friendly).
-   - Optional encryption hook: if `BACKUP_AGE_RECIPIENT` set, pipe dump
-     through `age` (documented, off by default).
-2. `scripts/restore.sh`: interactive (typed `RESTORE` confirm) or
-   `--yes`; stops app services (api/worker/web), restores the chosen
-   dump via `pg_restore --clean --if-exists`, `mc mirror` back into
-   minio, runs `migrate` service (forward-only safety per 49's
-   runbook), restarts, waits `/readyz`, prints post-restore checklist
-   (spot-check counts).
+1. `scripts/backup.sh` (bash, `set -euo pipefail`, `umask 077`,
+   host-run next to the compose file):
+   - Layout + naming (canonical, consumed by restore/verify):
+     `backups/pg/famchat-<YYYYMMDDTHHMMSSZ>.dump` (+`.age` when
+     encrypted), `backups/minio/` mirror,
+     `backups/manifests/famchat-<stamp>.json`.
+   - `pg_dump -Fc` via `docker compose exec -T postgres`.
+   - MinIO data: `mc mirror --overwrite` via a transient pinned `mc`
+     container.
+   - **Manifest JSON schema (exact)**: `{ stamp, pgDumpFile,
+     pgDumpSha256, rowCounts: { spaces, users, messages, attachments },
+     sampleObject: { key, sha256 } | null, bytes: { pgDump, minio } }`
+     — row counts via `psql -tAc`; no URLs, credentials, or env values
+     ever appear in the manifest or logs.
+   - Retention prune: keep 14 daily + 8 weekly (ISO week stamp dedupe);
+     deletes only within `backups/` (path-guard asserted).
+   - **Offsite replication is part of the script, not an afterthought**:
+     when `BACKUP_RCLONE_REMOTE` is set (e.g. `b2:famchat-backups`),
+     `rclone sync backups/ $BACKUP_RCLONE_REMOTE` runs after a
+     successful local backup (rclone via pinned container). The beta
+     instance MUST set it (runbook + 54 checklist item) — RPO 24 h
+     against full-disk loss depends on it; `.env` and secrets remain
+     excluded by design (operator stores secrets separately).
+   - Permissions: `backups/` 0700, files 0600 (enforced by the script).
+   - Non-zero exit on any failure; final line `BACKUP OK <sizes>`.
+   - Encryption hook: if `BACKUP_AGE_RECIPIENT` set, dump piped through
+     `age` → `.dump.age` (restore decrypts when `BACKUP_AGE_KEY_FILE`
+     set).
+2. `scripts/restore.sh --dump <path> [--yes]`: interactive typed
+   `RESTORE` confirm unless `--yes`; decrypts `.age` inputs when
+   `BACKUP_AGE_KEY_FILE` is set; stops app services (api/worker/web),
+   restores via `pg_restore --clean --if-exists`, `mc mirror` back into
+   minio, runs the `migrate` service (forward-only safety per 49's
+   runbook), restarts, waits `/readyz`, prints post-restore spot-check
+   (row counts vs the matching manifest).
 3. `scripts/verify-restore.sh` (the drill): spins an isolated compose
    project (`-p famchat-restore-test`, separate volumes/ports) from the
-   latest backup, restores into it, then asserts: migrations current,
-   row counts (spaces/users/messages/attachments) within tolerance of
-   values recorded at backup time (backup.sh writes a manifest JSON
-   with counts), a sampled attachment object exists in restored minio
-   and its sha256 matches the manifest sample; tears down. Designed to
-   run on the VPS off-peak (cron monthly) and manually before
-   release (54 gate).
-4. Cron installation: `docs/ops/backup.md` — crontab lines (nightly
-   03:30 JST backup; monthly verify), disk sizing guidance, offsite
-   options (rclone to object storage — documented pattern, not
-   implemented), encryption guidance, RPO 24 h / RTO 4 h statement +
-   what would violate them.
+   latest backup, restores into it, then asserts: migrations current;
+   row counts equal the manifest exactly; the manifest's sampleObject
+   exists in restored minio with matching sha256; **no `.env`/secret
+   files present anywhere under `backups/`** (find-based assertion);
+   tears down. Runs on the VPS off-peak (cron monthly) and manually
+   before release (54 gate).
+4. Cron installation: `docs/ops/backup.md` — crontab block including
+   `CRON_TZ=Asia/Tokyo` (with the UTC-equivalent line for hosts without
+   CRON_TZ support), nightly 03:30 backup + monthly verify, disk sizing
+   guidance, rclone remote setup (required for beta), encryption
+   guidance, RPO 24 h / RTO 4 h statement + what would violate them.
 5. Runbook `docs/ops/restore.md`: full-loss scenario (new VPS →
    install → restore → DNS), partial scenarios (bad deploy rollback via
    restore, single-space accidental deletion — point at grace period
    36 first), the forward-only-migration caveat.
-6. Failure-path tests (scripted, run in CI on a schedule-label — not
-   every PR): backup.sh on the dev stack produces dump + manifest;
-   verify-restore.sh passes against it; corrupted-dump path fails
-   loudly (inject truncation).
+6. Failure-path tests (scripted; this issue provides
+   `scripts/test-backup-cycle.sh` runnable locally against the dev
+   stack — **CI wiring is explicitly issue 51's**, which adds it as a
+   scheduled job): backup.sh produces dump + manifest; verify-restore.sh
+   passes against it; corrupted-dump path fails loudly (inject
+   truncation).
 
 ## Acceptance Criteria
 

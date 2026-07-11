@@ -25,6 +25,16 @@ Out of scope: store listing/public review (v2), push transport code
 
 ## Detailed Requirements
 
+0. **Owner-inputs precondition** (this issue cannot finish without
+   them; the runbook's owner-manual section collects them): final
+   bundle id / Android package name, Apple team id + Developer Program
+   membership, App Store Connect app record, Play Console app +
+   internal testers, EAS project link, APNs key + FCM service account
+   uploaded via `eas credentials`, Android signing SHA-256
+   fingerprints, `EXPO_ACCESS_TOKEN` (worker) and `EXPO_TOKEN` (CI —
+   distinct secrets, named exactly so), and the beta API/web URLs for
+   the preview profile. The agent-executable work below uses loud
+   `TODO(owner)` placeholders until these exist.
 1. `eas.json` profiles:
    - `development`: dev client, internal distribution, simulators
      enabled.
@@ -38,11 +48,19 @@ Out of scope: store listing/public review (v2), push transport code
    (adaptive icon for Android), iOS `NSCameraUsageDescription` /
    `NSPhotoLibraryUsageDescription` etc. localized rationale strings
    (ja/en via config plugins), `associatedDomains` + Android intent
-   filters for `${APP_BASE_URL}` (activates 42/46 links) with
-   `/.well-known/apple-app-site-association` and `assetlinks.json`
-   served by the web app (files added to `apps/web/public/.well-known/`
-   — coordinate note: needs team id/package fingerprints from owner
-   steps).
+   filters for `${APP_BASE_URL}` (activates 42/46 links) with the
+   well-known files served by the web app from
+   `apps/web/public/.well-known/`:
+   `apple-app-site-association` — JSON template
+   `{"applinks":{"details":[{"appIDs":["<TEAMID>.<bundleId>"],
+   "components":[{"/":"/invite/*"},{"/":"/link"}]}]}}` (no file
+   extension; must be served `application/json`) — and
+   `assetlinks.json` —
+   `[{"relation":["delegate_permission/common.handle_all_urls"],
+   "target":{"namespace":"android_app","package_name":"<pkg>",
+   "sha256_cert_fingerprints":["<SHA256>"]}}]` — placeholders filled
+   from the req-0 owner inputs; a web unit test asserts both routes
+   return 200 + `content-type: application/json`.
 3. `docs/mobile-release.md` runbook with two clearly separated
    sections:
    - **Owner-manual (once)**: Apple Developer Program enrollment, App
@@ -51,9 +69,11 @@ Out of scope: store listing/public review (v2), push transport code
      (`eas init`), push credentials (`eas credentials`: APNs key
      upload, FCM service account), `EXPO_ACCESS_TOKEN` secret for the
      worker, well-known file values (team id, SHA-256 fingerprints).
-   - **Per-release (agent-executable)**: version bump rules, `eas build
-     --profile preview --platform all`, `eas submit`, smoke checklist,
-     tagging.
+   - **Per-release (agent-executable)**: version bump rules, then per
+     platform: `eas build --profile preview --platform ios` /
+     `--platform android`, `eas submit --profile preview --platform ios
+     --latest` (TestFlight internal group) / `… --platform android
+     --latest` (Play internal track), smoke checklist, tagging.
 4. Versioning: `version` (semver, user-facing) + auto-increment
    `buildNumber`/`versionCode` via EAS (`autoIncrement`); runtime
    version policy `appVersion` (no OTA updates in v1 — expo-updates
@@ -69,10 +89,10 @@ Out of scope: store listing/public review (v2), push transport code
    `EXPO_TOKEN` secret — **documented but disabled by default**
    (workflow present with `workflow_dispatch` only; secret setup is an
    owner step).
-7. Tests/validation: `eas.json` + app.config schema-validated in unit
-   test (`expo config --type public` parses); well-known files
-   content-type test in web (served as `application/json`); the rest is
-   the checklist by nature.
+7. Tests/validation: `eas.json` + app.config schema-validated
+   (`expo config --type public` parses); web unit test for the
+   well-known routes (200 + `application/json` + parseable JSON); the
+   rest is the checklist by nature.
 
 ## Acceptance Criteria
 
@@ -89,14 +109,25 @@ Out of scope: store listing/public review (v2), push transport code
 ## Validation
 
 ```bash
+pnpm -w typecheck && pnpm -w lint
 pnpm --filter @famchat/mobile exec expo config --type public   # parses clean
+pnpm --filter @famchat/web test -- -t well-known
 # then: runbook per-release section executed once end-to-end
 ```
 
 ## Dependencies
 
-46, 47 (feature-complete app), 38 (web serves well-known files), 49
-(beta VPS URL for preview profile).
+46, 47 (feature-complete app), 38 (web serves static well-known
+files) + the owner-inputs precondition (req 0). The preview profile's
+API URL is a config value the owner supplies (typically the 49 beta
+host, but not a build-order dependency).
+
+## Acceptance split
+
+Agent-complete: eas.json, app.config, well-known templates + tests,
+runbook, checklist documents. Owner-gated: store records, credentials,
+the actual TestFlight/Play install evidence (owner executes the
+runbook and attaches the completed checklist).
 
 ## Non-goals
 

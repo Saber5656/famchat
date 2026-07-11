@@ -316,7 +316,7 @@ Types: `id` = ULID text PK; `ts` = timestamptz; enums are Prisma enums (Postgres
 
 **spaces**: id, name text 1–40, timezone text (IANA, default env `DEFAULT_TIMEZONE`), default_locale enum `ja,en`, moderation_mode enum `flag,block` default `flag`, ng_builtin_ja bool default true, ng_builtin_en bool default true, status enum `active,suspended,pending_deletion,deleted`, delete_after ts null, created_by FK users, created_at / updated_at.
 
-**memberships**: id, space_id FK cascade, user_id FK, role enum `guardian,adult,child`, is_owner bool default false, status enum `active,removed`, created_at / updated_at. Unique (space_id, user_id). Partial unique index: one `is_owner=true AND status='active'` per space.
+**memberships**: id, space_id FK cascade, user_id FK, role enum `guardian,adult,child`, is_owner bool default false, status enum `active,removed`, board_notify enum `all,none` default `all` (column added by issue 19's migration), created_at / updated_at. Unique (space_id, user_id). Partial unique index: one `is_owner=true AND status='active'` per space.
 
 **space_invites**: id, space_id FK cascade, code_hash unique, role enum `guardian,adult`, created_by FK users, expires_at (≤ 72h), max_uses int default 1, used_count int default 0, revoked_at null, created_at.
 
@@ -550,7 +550,7 @@ Matrix is exhaustive in code: every tRPC mutation/query declares required permis
 
 ### 13.2 Guardian oversight surfaces
 
-Guardian console (web + mobile "guardian" tab) provides: per-child overview (devices, rooms, quiet hours, recent flags/reports involving the child), flag queue, report queue, member/invite management, space settings (moderation mode, NG toggles/custom words, timezone/locale), space-scoped audit log view.
+Guardian console surfaces: per-child overview (devices, rooms, quiet hours, recent flags/reports involving the child), flag queue, report queue, member/invite management, space settings (moderation mode, NG toggles/custom words, timezone/locale), space-scoped audit log view. **Platform split in v1**: the web console provides everything; the mobile Guardian tab provides the monitoring + child-management subset (dashboard, queues, child overview incl. device link/revoke, quiet-hours editor) while member/invite management, space settings, and the audit view remain web-only (mobile parity is a v2 item).
 
 ### 13.3 Transparency to children
 
@@ -653,7 +653,7 @@ Services: `caddy` (443/80, auto-TLS, reverse proxy: `/` → web:3000, `/trpc|/ws
 ### 18.2 Backup & restore
 
 - Nightly cron (host): `scripts/backup.sh` = `pg_dump -Fc` + `mc mirror` (MinIO data) + retention (14 daily, 8 weekly) to a second disk/remote; secrets excluded.
-- `scripts/restore.sh` + runbook `docs/ops/restore.md`; **restore is tested by CI-adjacent script** against a scratch compose (issue 47 acceptance).
+- `scripts/restore.sh` + runbook `docs/ops/restore.md`; **restore is tested by a scripted drill** against a scratch compose (issue 50 acceptance).
 - RPO 24 h / RTO 4 h documented for beta.
 
 ### 18.3 Self-host
@@ -684,7 +684,7 @@ Threat actors: (T1) internet outsider; (T2) holder of a leaked invite/link code;
 | Admin REST | Bearer OPERATOR_TOKEN (≥ 32 bytes), constant-time compare, no CORS, optional IP allowlist, full audit |
 | Operator ↔ content | No content endpoints (§13.7); governance policy in §22 |
 
-### 19.3 Abuse cases → mitigations (selection; full table drives issue 50 checklist)
+### 19.3 Abuse cases → mitigations (selection; full table drives the issue 54 checklist)
 
 | Abuse case | Mitigation |
 |---|---|
@@ -700,7 +700,7 @@ Threat actors: (T1) internet outsider; (T2) holder of a leaked invite/link code;
 | Dependency compromise | pnpm lockfile, `pnpm audit` + osv-scanner in CI, Renovate weekly, minimal dependency policy (ADR-001), gitleaks secret scan in CI |
 | DoS on VPS | Caddy + Fastify rate limits, body size caps, upload quota; accepted residual risk at beta scale |
 
-### 19.4 Web platform hardening (issue 50 acceptance checklist source)
+### 19.4 Web platform hardening (issue 54 acceptance checklist source)
 
 CSP (web): `default-src 'self'; script-src 'self'; img-src 'self' blob: https://<s3-host>; connect-src 'self' <api,ws origins>; frame-ancestors 'none'; base-uri 'none'; form-action 'self'` (+ Next.js-required nonces). Headers: HSTS (1y, preload-ready), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Permissions-Policy` minimal (camera only on link page). Cookies per §6.3.
 

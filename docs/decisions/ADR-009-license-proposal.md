@@ -1,6 +1,6 @@
 # ADR-009: License — AGPL-3.0 proposed
 
-- Status: **Proposed — requires owner decision before issue 54 (OSS release prep) executes**
+- Status: **Proposed — requires owner decision before issue 57 (OSS release prep) executes**
 - Deciders: Owner (Saber5656) — decision pending
 
 ## Context

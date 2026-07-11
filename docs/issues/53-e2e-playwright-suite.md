@@ -31,10 +31,15 @@ Out of scope: mobile E2E (v2 Maestro), load testing, visual regression
    `e2e/` package — choose root `e2e/` package `@famchat/e2e` so specs
    can exercise multi-app flows without web-package coupling): chromium
    primary + webkit smoke project (chat + link paths only — WebKit
-   proxies iOS-Safari risk); `SEED_IDS` imported from `@famchat/db`;
-   auth helpers: session-injection via API login → storageState per
-   persona (mom/dad/grandma/uncle/haruto/hinata) built once per run;
-   two-context orchestration helper.
+   proxies iOS-Safari risk);
+   auth helpers split by kind: adults (mom/dad/grandma/uncle) log in
+   via API with the 52 credentials → storageState built once per run;
+   **children (haruto/hinata) have no credentials** — the child helper
+   drives the real flow: guardian-context API call
+   `children.createLinkCode` → `auth.childLink` (or the `/link` UI in
+   the specs that test it) → capture the device-session storageState.
+   Two-context orchestration helper. Seed ids come from
+   `loadSeedOutput()` (52), never hardcoded.
 3. Golden-path specs (each independent, seeded state + API arrangement,
    asserting UI **and** relevant API/DB effects):
    1. `onboarding`: operator invite (via admin API) → new guardian
@@ -59,14 +64,24 @@ Out of scope: mobile E2E (v2 Maestro), load testing, visual regression
       (chromium CDP push, from 38).
    10. `lifecycle`: owner requests deletion → read-only + countdown →
        cancel; export request → download zip → parse + assert counts
-       (36).
+       (36). (Added beyond the DESIGN §21 base list as release
+       coverage; ISSUE_PLAN §6.4 includes it.)
 4. Flake policy: `retries: 1` in CI; specs must pass 5× locally
    (`--repeat-each 5`) before merge (documented in CONTRIBUTING via
    57); a `@quarantine` tag excludes from required runs with an issue
    link required.
 5. CI (`e2e.yml`): nightly on main + PRs labeled `e2e`; builds images,
    runs `e2e-up.sh`, executes suite (chromium job + webkit smoke job),
-   uploads traces/videos on failure; ~25-min budget documented.
+   uploads traces/videos on failure with **artifact hygiene (DESIGN
+   §19.6)**: storageState/auth files are written outside the artifact
+   dirs and never uploaded; Playwright configured with
+   `recordHar: false` and trace network capture limited to
+   status/timing (no bodies/headers); CI env masks all secrets;
+   artifact retention 7 days. The e2e stack uses seed-only dummy data,
+   which keeps residual exposure low — but session material must still
+   never land in artifacts (a CI grep step asserts no
+   `famchat_session` value appears in uploaded files). ~25-min budget
+   documented.
 6. Consolidation: migrate the per-issue scoped specs (@chat @guardian
    @quiet …) into `e2e/` where duplicated, keeping fast component-level
    Playwright in apps/web only where it tests web-only concerns
@@ -91,8 +106,8 @@ pnpm --filter @famchat/e2e test -- --repeat-each 5   # determinism proof
 
 ## Dependencies
 
-52 (seed/SEED_IDS), 49 (stack), 34/33/32/24/23 (features under test),
-36, 38, 51 (CI base).
+23, 24, 32, 33, 34, 36, 38, 39 (features under test), 49 (stack), 51
+(CI base), 52 (seed + loadSeedOutput).
 
 ## Non-goals
 

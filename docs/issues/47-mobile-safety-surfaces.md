@@ -37,20 +37,28 @@ operator anything.
    post/comment menus (45), member profile sheet; identical privacy/
    idempotency behavior; never shown on own content.
 3. Guardian tab (guardian memberships only; hidden otherwise — 41's
-   gate):
-   - Dashboard-lite: open flags / open reports / children cards with
-     live badges (guardian channel events).
-   - Flag queue + report queue: list/detail/actions (approve/remove,
-     resolve/dismiss) per 31's semantics with pull-to-refresh; content
-     snapshots + deep links into rooms/board.
-   - Child overview: 30's DTO — devices (revoke with confirm), rooms,
-     quiet-hours summary, recent items; **link a new device**: generate
-     + display the 6-digit code and QR full-screen with countdown/
-     regenerate (mirrors 32 — this is the on-the-go "add grandma's old
-     tablet at her house" flow).
-   - Quiet-hours editor: native port of 34's editor (day chips, time
-     pickers via native pickers, overnight badge, ≤ 14 rules, preview
-     strip, save) — validation parity via the shared schema.
+   gate). Scope per DESIGN §13.2's v1 platform split: monitoring +
+   child management only (member/invite/space-settings stay web-only).
+   Concrete routes (expo-router group `(app)/guardian/`):
+   - `guardian/index` dashboard-lite: `guardian.dashboard` DTO → open
+     flags / open reports / children cards with live badges (guardian
+     channel events via `useSocketEvent`).
+   - `guardian/moderation` + `guardian/reports`: FlashList queues from
+     `moderation.flagQueue` / `reports.queue`, detail sheets, actions
+     `moderation.resolveHit` / `reports.resolve|dismiss` with
+     optimistic rollback per 31's semantics; pull-to-refresh; live
+     content DTO / tombstone rendering + `routeFromLink`-based deep
+     links into rooms/board.
+   - `guardian/children/[childUserId]`: 30's `childOverview` DTO —
+     devices (`children.revokeDevice` with confirm), rooms, quiet-hours
+     summary, recent items; **link a new device**:
+     `children.createLinkCode` → full-screen 6-digit code + QR of the
+     backend qrPayload with countdown/regenerate (mirrors 32 — the
+     on-the-go "add grandma's old tablet at her house" flow).
+   - `guardian/children/[childUserId]/quiet-hours`: native port of 34's
+     editor (day chips, native time pickers, overnight badge, ≤ 14
+     rules, preview strip, `guardian.setQuietHours`) — validation
+     parity via the shared schema + 29's fixtures.
 4. Child settings variant (extends 42's settings stub): avatar preset
    grid + locale + the transparency note + read-only quiet-hours card
    (34's spec); adult settings: profile fields, sessions list + revoke
@@ -79,14 +87,17 @@ operator anything.
 ## Validation
 
 ```bash
-pnpm --filter @famchat/mobile test -- --grep "lock|report|guardian"
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/mobile test -- -t lock
+pnpm --filter @famchat/mobile test -- -t report
+pnpm --filter @famchat/mobile test -- -t guardian
 # manual: two-device guardian/child checklist
 ```
 
 ## Dependencies
 
-43 (chat surfaces), 45 (board surfaces), 30 (console APIs), 29, 28, 33
-(shared dialog spec), 34 (editor spec).
+28, 29, 30 (APIs), 33 (dialog contract), 34 (editor spec), 43 (chat
+surfaces), 45 (board surfaces), 46 (routeFromLink for deep links).
 
 ## Non-goals
 

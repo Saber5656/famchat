@@ -26,13 +26,24 @@ builds (48's manual-dispatch workflow), deploy automation (manual per
 
 1. `ci.yml` (PR + push main) — jobs with pnpm store caching:
    - `lint-type`: eslint, prettier check, `pnpm -r typecheck`.
-   - `unit`: `pnpm -r --if-present test -- --exclude integration`
-     (convention: integration suites tagged/foldered `integration/`).
+   - `unit`: `pnpm -r --if-present test:unit` — convention set by this
+     issue: every workspace defines `test:unit` (vitest project
+     excluding `test/integration/**`) and `test:integration`
+     (only that folder); root scripts call these, so no runner-flag
+     assumptions leak across workspaces.
    - `integration`: services via GitHub Actions service containers
-     (postgres:16, redis:7) + minio started via docker run step;
-     runs `pnpm --filter @famchat/api test`, `--filter @famchat/db
-     test`, `--filter @famchat/worker test` with env pointed at the
-     services; artifacts on failure (logs).
+     postgres:16 (`POSTGRES_USER/PASSWORD/DB=famchat`, health cmd
+     `pg_isready`) and redis:7 (health `redis-cli ping`); MinIO via a
+     `docker run -d` step (pinned tag, `MINIO_ROOT_USER/PASSWORD` from
+     job env) + `mc mb` bucket-creation step + curl health wait; job
+     env block sets exactly `DATABASE_URL`, `REDIS_URL`, `S3_ENDPOINT`,
+     `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+     `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE=true`,
+     `SESSION_SECRET`, `SMTP_URL` (mailpit container), `APP_BASE_URL`,
+     `WEB_ORIGINS` (CI-only dummy secrets); runs `pnpm -r --if-present
+     test:integration` — which **includes the `@tenant` cross-tenant
+     denial suites (ISSUE_PLAN §6.8 evidence lives in this job)**;
+     artifacts on failure (logs).
    - `i18n`: `pnpm i18n:check --strict` (40).
    - `gitleaks`: full-repo scan (action, pinned by SHA), config
      `.gitleaks.toml` with documented allowlist (test fixtures).
@@ -45,18 +56,22 @@ builds (48's manual-dispatch workflow), deploy automation (manual per
    - All third-party actions pinned to commit SHAs (supply-chain rule).
 2. `release.yml` (on tag `v*`): builds and pushes
    `ghcr.io/saber5656/famchat-{api,worker,web}` multi-stage images
-   (linux/amd64; arm64 optional matrix documented but off), tags
-   `vX.Y.Z` + `latest`, OCI labels (source, revision, licenses);
-   `GITHUB_TOKEN` `packages: write` permission scoped per job;
-   provenance attestation enabled (`docker/build-push-action`
-   provenance) — images become the 49 pins.
+   (linux/amd64; arm64 optional matrix documented but off) using
+   `docker/metadata-action` semver tagging: every tag publishes its
+   exact version; **`latest` moves only for stable releases**
+   (prerelease tags like `v0.0.1-rc0` never touch `latest`). OCI
+   labels (source, revision, licenses); job permissions `packages:
+   write` **and `id-token: write`** (required by provenance
+   attestation in `docker/build-push-action`) — images become the 49
+   pins.
 3. Concurrency: cancel-in-progress per ref for ci.yml; release never
    cancelled.
 4. `renovate.json`: weekly grouped minor/patch, daily security updates,
    lockfile maintenance, pin GitHub Actions digests, labels; pnpm
    workspaces preset.
 5. Branch protection: `docs/ops/repo-settings.md` documenting required
-   checks (lint-type, unit, integration, i18n, gitleaks, web-build),
+   checks (lint-type, unit, integration, i18n, gitleaks, deps-audit,
+   web-build),
    linear history, no force push (matches the user's ruleset), and that
    the owner applies these in GitHub settings (agent documents, owner
    clicks).
@@ -80,8 +95,14 @@ builds (48's manual-dispatch workflow), deploy automation (manual per
 ## Validation
 
 ```bash
-gh workflow view ci.yml && gh run list --workflow ci.yml -L 5
+gh run list --workflow ci.yml -L 5
+# per-gate counterexample evidence: one scratch PR per gate, then
+gh pr checks <scratch-pr> --json name,bucket
+# release flow: git tag v0.0.1-rc0 && git push origin v0.0.1-rc0
+gh run watch --workflow release.yml
 docker pull ghcr.io/saber5656/famchat-api:v0.0.1-rc0
+docker manifest inspect ghcr.io/saber5656/famchat-api:latest || echo "latest untouched by rc (expected)"
+bash scripts/test-backup-cycle.sh   # 50's cycle wired as the scheduled job added here
 ```
 
 ## Dependencies

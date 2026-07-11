@@ -24,7 +24,9 @@ here), mobile (44), multi-image messages (one per message by design).
 ## Detailed Requirements
 
 1. Shared uploader component `useAttachmentUpload()` (placed in
-   `apps/web/src/lib/uploads.ts`, reused by 24):
+   `apps/web/src/lib/uploads.ts`, reused by 24; its state-machine test
+   fixture table is exported from
+   `packages/shared/src/testing/upload-fixtures.ts` so 44 reuses it):
    states `picking → requesting → uploading(pct) → processing → ready |
    failed(reason)`; flow: client-side pre-checks (mime allowlist, size ≤
    `UPLOAD_MAX_BYTES` with friendly error before any network) →

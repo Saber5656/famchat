@@ -77,19 +77,19 @@ agent. `Deps` = issue numbers that must be completed first.
 | 42 | `42-mobile-auth-and-device-link.md` | Mobile auth: login, QR link, PIN lock | L | 41,09 |
 | 43 | `43-mobile-rooms-and-chat.md` | Mobile rooms + chat (WS, receipts) | L | 16,22,42 |
 | 44 | `44-mobile-image-share.md` | Mobile image share | M | 43,18 |
-| 45 | `45-mobile-board.md` | Mobile bulletin board | M | 42,19 |
-| 46 | `46-mobile-push-and-deeplinks.md` | Mobile push (Expo) + deep links | L | 43,37 |
-| 47 | `47-mobile-safety-surfaces.md` | Mobile safety surfaces (lock, report, guardian tab) | L | 43,30,29,28 |
+| 45 | `45-mobile-board.md` | Mobile bulletin board | M | 19,43,44 |
+| 46 | `46-mobile-push-and-deeplinks.md` | Mobile push (Expo) + deep links | L | 37,39,43 |
+| 47 | `47-mobile-safety-surfaces.md` | Mobile safety surfaces (lock, report, guardian tab) | L | 28,29,30,33,34,43,45,46 |
 | 48 | `48-eas-internal-distribution.md` | EAS internal distribution (TestFlight/Play internal) | M | 46,47 |
-| 49 | `49-production-compose-and-caddy.md` | Production compose + Caddy TLS + migrate gate | L | 18,38 |
+| 49 | `49-production-compose-and-caddy.md` | Production compose + Caddy TLS + migrate gate | L | 18,35,38 |
 | 50 | `50-backup-and-restore.md` | Backup + tested restore | M | 49 |
 | 51 | `51-ci-cd-full-pipeline.md` | Full CI/CD (integration tests, GHCR publish) | L | 49 |
-| 52 | `52-seed-and-demo-data.md` | Seed + demo data | M | 27,29,19 |
-| 53 | `53-e2e-playwright-suite.md` | Web E2E suite (golden paths) | L | 34,33,32,24,23,52 |
+| 52 | `52-seed-and-demo-data.md` | Seed + demo data | M | 19,27,28,29 |
+| 53 | `53-e2e-playwright-suite.md` | Web E2E suite (golden paths) | L | 23,24,32,33,34,36,38,39,49,51,52 |
 | 54 | `54-security-hardening-gate.md` | Security hardening gate (DESIGN §19 checklist) | L | 49,51,53 |
-| 55 | `55-selfhost-and-operator-docs.md` | Self-host + operator docs (ja/en) | M | 50,35 |
-| 56 | `56-beta-legal-docs.md` | Closed-beta ToS/Privacy templates + consent flow | M | 07,20 |
-| 57 | `57-oss-release-prep.md` | OSS release prep (license, SECURITY.md, scans) | M | 54,55, ADR-009 decision |
+| 55 | `55-selfhost-and-operator-docs.md` | Self-host + operator docs (ja/en) | M | 35,50,51,52 |
+| 56 | `56-beta-legal-docs.md` | Closed-beta ToS/Privacy templates + consent flow | M | 07,20,36,53,55 |
+| 57 | `57-oss-release-prep.md` | OSS release prep (license, SECURITY.md, scans) | M | 51,54,55,56, ADR-009 decision |
 
 ## 3. Implementation waves
 
@@ -149,7 +149,7 @@ Waves are sequential; issues inside a wave may run in parallel when their
 | §15 | i18n | 20,40,41 (+ every UI issue ships ja+en) |
 | §16 | Web app | 20–25,31–34,38,39 |
 | §17 | Mobile app | 41–48 |
-| §18 | Deployment & ops | 02,49,50,55 |
+| §18 | Deployment & ops | 02,49,50,51,55 |
 | §19 | Security model | 12,17,18,35,51,54,57 (+ security AC in every issue) |
 | §20 | Observability | 05,35,49 |
 | §21 | Testing strategy | 01,51,52,53 (+ Validation in every issue) |
@@ -168,7 +168,7 @@ Waves are sequential; issues inside a wave may run in parallel when their
    gitleaks + dependency audit (51,54).
 4. **E2E golden paths** (53) executed against the production-shaped compose
    stack: onboard → invite → child link → chat → image → NG flag → report →
-   quiet hours → board → notifications.
+   quiet hours → board → notifications → lifecycle (deletion/export).
 5. **Security gate** (54): DESIGN §19 tables converted into a pass/fail
    checklist with evidence links; release-blocking.
 6. **Restore drill** (50): backup restored onto scratch stack; data verified.

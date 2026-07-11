@@ -25,12 +25,13 @@ governance beyond a solo-maintainer note, store publication (v2).
 
 ## Detailed Requirements
 
-1. **License (human gate)**: obtain the owner's ADR-009 decision;
-   update ADR-009 status to Accepted with the choice; add `LICENSE`
-   (exact SPDX text), `license` fields in every package.json, and a
-   README licensing section. If AGPL-3.0 (proposed): add the
-   recommended per-file header policy decision (repo-level notice
-   only, no per-file headers — simpler; document). Add
+1. **License (human gate)**: obtain the owner's ADR-009 decision —
+   which covers BOTH the license choice AND the header policy (the
+   proposed default, repo-level notice without per-file headers, is
+   part of what the owner accepts or amends in ADR-009; this issue
+   implements whatever the accepted ADR text says); update ADR-009
+   status to Accepted; add `LICENSE` (exact SPDX text), `license`
+   fields in every package.json, and a README licensing section. Add
    `license-checker-rseidelsohn` (or `pnpm licenses list` script) CI
    step failing on copyleft-incompatible or unknown prod dependency
    licenses relative to the chosen license (policy table in the
@@ -63,10 +64,13 @@ governance beyond a solo-maintainer note, store publication (v2).
    positive rationale); **any real secret ever committed ⇒ rotate +
    consider fresh-repo migration per the user's global rule** —
    escalate to owner, do not flip.
-8. Repo metadata prep (documented for owner or via gh CLI where
-   authorized): description, topics (family, chat, child-safety,
-   self-hosted, typescript), social preview note; ensure default
-   branch protection doc (51) applied.
+8. Repo metadata prep — exact split: the agent runs
+   `gh repo edit Saber5656/famchat --description "…" --add-topic
+   family --add-topic chat --add-topic child-safety --add-topic
+   self-hosted --add-topic typescript` (reversible metadata,
+   agent-executable); everything else (social preview image, branch
+   protection clicks per 51's doc, the visibility flip) is owner-only
+   and listed in the flip checklist.
 9. `docs/release/public-flip-checklist.md` — the owner-executed gate:
    ADR-009 accepted + LICENSE merged; history scan clean/triaged;
    54 security gate signed off; 56 legal templates owner-reviewed;
@@ -90,14 +94,17 @@ governance beyond a solo-maintainer note, store publication (v2).
 
 ```bash
 node scripts/check-licenses.mjs
-gitleaks detect --source . --log-opts="--all" && echo clean
+gitleaks detect --source . --log-opts="--all" && echo gitleaks-clean
+docker run --rm -v "$PWD:/repo" ghcr.io/trufflesecurity/trufflehog:v3 \
+  git file:///repo --only-verified && echo trufflehog-clean
+# both results + triage recorded in docs/security/history-scan.md
 pnpm docs:check
 ```
 
 ## Dependencies
 
-54 (security gate), 55 (docs), 56 (legal), 51 (CI), **ADR-009 owner
-decision (human gate)**.
+51 (CI), 54 (security gate), 55 (docs), 56 (legal owner review — gates
+the flip checklist), **ADR-009 owner decision (human gate)**.
 
 ## Non-goals
 
