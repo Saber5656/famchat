@@ -38,56 +38,56 @@ agent. `Deps` = issue numbers that must be completed first.
 | 03 | `03-shared-core-env-errors-constants.md` | `@famchat/shared`: env, errors, constants, limits | M | 01 |
 | 04 | `04-db-prisma-baseline-identity-schema.md` | `@famchat/db`: Prisma baseline (identity/tenancy schema) | M | 02,03 |
 | 05 | `05-api-server-skeleton.md` | `apps/api` Fastify + tRPC skeleton | M | 03,04 |
-| 06 | `06-guardian-auth-sessions.md` | Guardian/adult auth + sessions + password reset | L | 05 |
+| 06 | `06-guardian-auth-sessions.md` | Guardian/adult auth + sessions + password reset | L | 04,05 |
 | 07 | `07-instance-gate-and-space-creation.md` | Instance invite gate + space creation | M | 06 |
 | 08 | `08-space-invites-adults.md` | Space invites (adult/guardian) | M | 07 |
 | 09 | `09-child-accounts-and-device-link.md` | Child accounts + QR device link | L | 07 |
 | 10 | `10-authz-permission-matrix-middleware.md` | Permission matrix + tRPC authz middleware | M | 07,08,09 |
 | 11 | `11-audit-log-foundation.md` | Audit log foundation | M | 06,07,08,09,10 |
-| 12 | `12-rate-limits-and-http-hardening-baseline.md` | Rate limits + HTTP hardening baseline | M | 06,08,09 |
+| 12 | `12-rate-limits-and-http-hardening-baseline.md` | Rate limits + HTTP hardening baseline | M | 05,06,08,09 |
 | 13 | `13-rooms-model-and-api.md` | Rooms model + API (incl. guardian oversight rule) | L | 09,10,11 |
 | 14 | `14-messages-model-and-api.md` | Messages model + API | L | 13 |
-| 15 | `15-realtime-socketio.md` | Realtime socket.io server + event fanout | L | 14 |
-| 16 | `16-read-receipts.md` | Read receipts + unread counts | M | 15 |
+| 15 | `15-realtime-socketio.md` | Realtime socket.io server + event fanout | L | 06,13,14 |
+| 16 | `16-read-receipts.md` | Read receipts + unread counts | M | 13,14,15 |
 | 17 | `17-attachments-upload-api.md` | Attachment upload API (presigned, quarantine) | M | 12,14 |
-| 18 | `18-image-worker-pipeline.md` | `apps/worker` + image processing pipeline | L | 17 |
-| 19 | `19-board-backend.md` | Bulletin board backend | M | 13,15,18 |
+| 18 | `18-image-worker-pipeline.md` | `apps/worker` + image processing pipeline | L | 02,17 |
+| 19 | `19-board-backend.md` | Bulletin board backend | M | 13,15,17,18 |
 | 20 | `20-web-skeleton-i18n-auth.md` | `apps/web` skeleton: i18n, auth pages, child link page | L | 06,08,09 |
 | 21 | `21-web-spaces-rooms-shell.md` | Web shell: space switcher, room list, unread | M | 16,20 |
-| 22 | `22-web-chat-room-ui.md` | Web chat room UI (list, composer, WS, receipts) | L | 21 |
-| 23 | `23-web-image-share-ui.md` | Web image share UI | M | 18,22 |
+| 22 | `22-web-chat-room-ui.md` | Web chat room UI (list, composer, WS, receipts) | L | 14,16,21 |
+| 23 | `23-web-image-share-ui.md` | Web image share UI | M | 17,18,22 |
 | 24 | `24-web-board-ui.md` | Web bulletin board UI | M | 19,21,23 |
-| 25 | `25-web-user-settings-ui.md` | Web user settings (profile, locale, sessions) | M | 20 |
+| 25 | `25-web-user-settings-ui.md` | Web user settings (profile, locale, sessions) | M | 10,11,20 |
 | 26 | `26-moderation-package.md` | `@famchat/moderation`: normalize + matcher + base lists | L | 03 |
-| 27 | `27-moderation-pipeline-integration.md` | Moderation pipeline on all content writes | L | 14,19,26 |
+| 27 | `27-moderation-pipeline-integration.md` | Moderation pipeline on all content writes | L | 13,14,19,25,26 |
 | 28 | `28-reports-backend.md` | Reports backend | M | 11,13,14,19 |
-| 29 | `29-quiet-hours-backend.md` | Quiet hours backend + enforcement | L | 09,14,16,17,19,25 |
-| 30 | `30-guardian-console-backend.md` | Guardian console backend (overview, removals, settings) | L | 27,28,29 |
-| 31 | `31-web-guardian-dashboard-ui.md` | Web guardian dashboard (flags, reports, children, audit) | L | 22,24,30 |
-| 32 | `32-web-space-admin-ui.md` | Web space admin UI (members, invites, children, settings) | L | 30,21 |
-| 33 | `33-web-report-flow-ui.md` | Web report flow UI (child-friendly) | S | 22,24,28,31 |
+| 29 | `29-quiet-hours-backend.md` | Quiet hours backend + enforcement | L | 09,13,14,15,16,17,19,25,28 |
+| 30 | `30-guardian-console-backend.md` | Guardian console backend (overview, removals, settings) | L | 09,11,13,15,27,28,29 |
+| 31 | `31-web-guardian-dashboard-ui.md` | Web guardian dashboard (flags, reports, children, audit) | L | 22,24,27,28,30 |
+| 32 | `32-web-space-admin-ui.md` | Web space admin UI (members, invites, children, settings) | L | 08,09,21,30 |
+| 33 | `33-web-report-flow-ui.md` | Web report flow UI (child-friendly) | S | 22,24,28,29,31 |
 | 34 | `34-web-quiet-hours-ux.md` | Web quiet hours UX (lock screen + editor) | M | 25,29,31 |
-| 35 | `35-operator-admin-api-and-cli.md` | Operator admin REST API + `pnpm ops` CLI | M | 07,11,12 |
-| 36 | `36-data-lifecycle-deletion-export.md` | Data lifecycle: deletion, purge, export | L | 18,30,35 |
+| 35 | `35-operator-admin-api-and-cli.md` | Operator admin REST API + `pnpm ops` CLI | M | 06,07,10,11,12,15 |
+| 36 | `36-data-lifecycle-deletion-export.md` | Data lifecycle: deletion, purge, export | L | 18,30,32,35 |
 | 37 | `37-notification-framework-inapp.md` | Notification framework + in-app feed (worker fanout) | L | 15,18,29,35,36 |
 | 38 | `38-web-push-and-pwa.md` | Web Push (VAPID) + PWA installability | L | 20,25,37 |
 | 39 | `39-web-notifications-ui.md` | Web notifications UI (feed, badges, prefs) | M | 21,22,24,31,37 |
 | 40 | `40-i18n-completeness-gate.md` | i18n completeness gate + tooling | M | 20,24,25,31,32,33,34,38,39 |
 | 41 | `41-mobile-scaffold-i18n.md` | `apps/mobile` Expo scaffold + i18n | M | 03,20 |
-| 42 | `42-mobile-auth-and-device-link.md` | Mobile auth: login, QR link, PIN lock | L | 41,09 |
+| 42 | `42-mobile-auth-and-device-link.md` | Mobile auth: login, QR link, PIN lock | L | 06,09,32,41 |
 | 43 | `43-mobile-rooms-and-chat.md` | Mobile rooms + chat (WS, receipts) | L | 16,22,42 |
-| 44 | `44-mobile-image-share.md` | Mobile image share | M | 43,18 |
-| 45 | `45-mobile-board.md` | Mobile bulletin board | M | 19,43,44 |
+| 44 | `44-mobile-image-share.md` | Mobile image share | M | 17,18,23,43 |
+| 45 | `45-mobile-board.md` | Mobile bulletin board | M | 19,24,43,44 |
 | 46 | `46-mobile-push-and-deeplinks.md` | Mobile push (Expo) + deep links | L | 37,39,43 |
 | 47 | `47-mobile-safety-surfaces.md` | Mobile safety surfaces (lock, report, guardian tab) | L | 28,29,30,33,34,43,45,46 |
-| 48 | `48-eas-internal-distribution.md` | EAS internal distribution (TestFlight/Play internal) | M | 46,47 |
+| 48 | `48-eas-internal-distribution.md` | EAS internal distribution (TestFlight/Play internal) | M | 38,46,47 |
 | 49 | `49-production-compose-and-caddy.md` | Production compose + Caddy TLS + migrate gate | L | 18,35,38 |
 | 50 | `50-backup-and-restore.md` | Backup + tested restore | M | 49 |
-| 51 | `51-ci-cd-full-pipeline.md` | Full CI/CD (integration tests, GHCR publish) | L | 49 |
-| 52 | `52-seed-and-demo-data.md` | Seed + demo data | M | 19,27,28,29 |
+| 51 | `51-ci-cd-full-pipeline.md` | Full CI/CD (integration tests, GHCR publish) | L | 01,40,49 |
+| 52 | `52-seed-and-demo-data.md` | Seed + demo data | M | 04,18,19,27,28,29 |
 | 53 | `53-e2e-playwright-suite.md` | Web E2E suite (golden paths) | L | 23,24,32,33,34,36,38,39,49,51,52 |
-| 54 | `54-security-hardening-gate.md` | Security hardening gate (DESIGN §19 checklist) | L | 49,51,53 |
-| 55 | `55-selfhost-and-operator-docs.md` | Self-host + operator docs (ja/en) | M | 35,50,51,52 |
+| 54 | `54-security-hardening-gate.md` | Security hardening gate (DESIGN §19 checklist) | L | 35,38,49,51,53 |
+| 55 | `55-selfhost-and-operator-docs.md` | Self-host + operator docs (ja/en) | M | 35,49,50,51,52 |
 | 56 | `56-beta-legal-docs.md` | Closed-beta ToS/Privacy templates + consent flow | M | 07,20,36,53,55 |
 | 57 | `57-oss-release-prep.md` | OSS release prep (license, SECURITY.md, scans) | M | 51,54,55,56, ADR-009 decision |
 

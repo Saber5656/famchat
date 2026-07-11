@@ -569,7 +569,7 @@ Child UI permanently shows an oversight notice in room headers and onboarding ("
 - Stored per child in `child_settings.quiet_hours` jsonb; zod schema:
   `{ enabled: boolean, rules: Array<{ days: (1..7)[], start: "HH:MM", end: "HH:MM" }> }` — `days` in ISO weekday numbering interpreted in the **space timezone**; windows may cross midnight (start > end ⇒ wraps to next day).
 - Evaluation: pure function `isQuietNow(quietHours, spaceTz, now)` in `packages/shared`; unit-tested incl. midnight wrap and timezone edges (JST default; DST-bearing zones like `Europe/London` in tests).
-- Enforcement points: (1) every child-authored content mutation; (2) message/room/board read queries return `QUIET_HOURS_ACTIVE`; (3) WS refuses room subscriptions and emits `quietHours.state`; (4) push fanout to the child is suppressed during quiet hours (in-app rows still written; delivered as unread on wake). **Exempt allowlist** (safety and basic account primitives trump time rules; exact constant `QUIET_EXEMPT_PROCEDURES` in `packages/shared`): `reports.create`, `auth.me`, `auth.quietState`, `auth.logout`, `auth.verifyChildPin`, `auth.updateLocale`, `notifications.feed`, `notifications.markRead`, `notifications.markAllRead`, `notifications.unreadCounts`, `spaces.list`, `spaces.get`.
+- Enforcement points: (1) every child-authored content mutation; (2) message/room/board read queries return `QUIET_HOURS_ACTIVE`; (3) WS refuses room subscriptions and emits `quietHours.state`; (4) notification fanout to a quiet child follows §14.2 exactly — content-type notifications (message.new, board.*) are suppressed entirely (no push, no WS, no feed row; unread state derives from room read pointers §7.7), while child-directed system types still write feed rows with push deferred. **Exempt allowlist** (safety and basic account primitives trump time rules; exact constant `QUIET_EXEMPT_PROCEDURES` in `packages/shared`): `reports.create`, `auth.me`, `auth.quietState`, `auth.logout`, `auth.verifyChildPin`, `auth.updateLocale`, `notifications.feed`, `notifications.markRead`, `notifications.markAllRead`, `notifications.unreadCounts`, `spaces.list`, `spaces.get`.
 - Client UX: lock screen with friendly countdown ("あさ 7:00 に あえるよ"); guardians see per-child schedule editor with per-day rows and copy-to-all.
 
 ### 13.6 Reporting flow
@@ -744,7 +744,7 @@ Secrets only via env (`.env` on host, chmod 600); `.env*` gitignored; `.env.exam
 | Web E2E | Playwright against compose stack | golden paths: onboard → invite → child link → chat → image → flag → report → quiet hours → board | CI (PR-labeled or nightly) |
 | Mobile | jest-expo unit + manual smoke checklist per release | auth/link/chat/push happy paths | release runbook |
 | i18n | `check-i18n.mjs` | catalog parity + unused/missing keys | CI per PR |
-| Security | checklist issue 50 + gitleaks + pnpm audit/osv | §19 tables as acceptance items | pre-release gate |
+| Security | checklist issue 54 + gitleaks + pnpm audit/osv | §19 tables as acceptance items | pre-release gate |
 | Restore drill | scripted | §18.2 | pre-release gate |
 
 Per-issue Validation sections give exact commands; the definition of done for every implementation issue includes: typecheck, lint, unit tests green, and issue-specific validation steps.
