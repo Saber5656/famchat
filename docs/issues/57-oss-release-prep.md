@@ -10,10 +10,14 @@ executes.
 
 ## Context
 
-The repo was designed public-first (task premise), but publication is a
-one-way door: history is scanned, licensing decided (ADR-009 — **blocked
-on owner**), and trust documents in place before the flip. The owner
-performs the actual visibility change.
+**The repository is already public** (visibility PUBLIC since creation),
+so there is no private→public flip; what this issue gates is the
+**v1.0 release announcement**: history scanned, licensing decided
+(ADR-009 — **blocked on owner**; until then the public repo carries no
+license, i.e. all-rights-reserved), and trust documents in place. The
+"flip checklist" below is therefore a release checklist; the only
+owner-visibility action left is confirming repo settings (issues/
+actions/packages exposure) rather than changing visibility.
 
 ## Scope
 
@@ -71,12 +75,12 @@ governance beyond a solo-maintainer note, store publication (v2).
    agent-executable); everything else (social preview image, branch
    protection clicks per 51's doc, the visibility flip) is owner-only
    and listed in the flip checklist.
-9. `docs/release/public-flip-checklist.md` — the owner-executed gate:
+9. `docs/release/v1-release-checklist.md` — the owner-executed gate:
    ADR-009 accepted + LICENSE merged; history scan clean/triaged;
    54 security gate signed off; 56 legal templates owner-reviewed;
    55 selfhost verified; CI green on main; screenshots current;
    `git log` author-email check (no private emails unintended);
-   flip visibility → verify issues/actions/packages visibility →
+   repo settings confirmed (issues/actions/packages exposure) →
    tag v1.0.0 → announce note.
 
 ## Acceptance Criteria
