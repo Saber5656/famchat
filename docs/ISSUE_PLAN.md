@@ -23,8 +23,9 @@ except newly discovered implementation unknowns (§8):
 > operator can administer the instance via CLI, take tested backups, restore
 > them, export/delete spaces; CI enforces lint/type/tests/i18n parity; the
 > security hardening checklist (DESIGN §19) passes; self-host and closed-beta
-> legal docs exist in ja+en; and the repository is ready to be made public
-> once the owner decides the license (ADR-009).
+> legal docs exist in ja+en; and the already-public repository carries its
+> MIT license (ADR-009) and release/trust documents, ready for the v1.0
+> announcement.
 
 ## 2. Issue list in recommended execution order
 
