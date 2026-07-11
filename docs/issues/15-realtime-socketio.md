@@ -30,17 +30,26 @@ notification events (27/37), presence/typing (v2).
 2. Server (`apps/api/src/ws/index.ts`): socket.io v4 attached to the
    Fastify HTTP server at path `/ws`; CORS same allowlist as HTTP;
    `@socket.io/redis-adapter` on the shared Redis (pub/sub duplicates).
-3. Handshake auth middleware: cookie (web) or `auth.token` (mobile) →
-   `resolveSession`; failure ⇒ `next(Error('UNAUTHORIZED'))`. On connect:
-   join `user:<id>`, `space:<id>` per active membership, and
+3. Handshake auth middleware — concrete adapter contract: implement
+   `resolveSessionFromHandshake(handshake)` in `src/ws/auth.ts` that
+   extracts the raw token from either the `famchat_session` cookie
+   (parse `handshake.headers.cookie`) or `handshake.auth.token`
+   (mobile), then calls the SAME session-service lookup used by HTTP
+   (06's hash lookup + expiry/revocation checks — no duplicated logic);
+   failure ⇒ `next(Error('UNAUTHORIZED'))`. On connect: join
+   `user:<id>`, `space:<id>` per active membership, and
    `space:<id>:guardians` for guardian memberships. Store `{ userId,
-   membershipRoles }` on `socket.data`.
-4. `subscribeRoom { spaceId, roomId }` (ack `{ ok } | { ok:false, code }`):
-   `canAccessRoom` (member or observer) → join `room:<id>`; quiet-hours
-   hook `wsQuietGate(socket, spaceId)` (no-op until 29) may refuse with
-   `QUIET_HOURS_ACTIVE`. `unsubscribeRoom` leaves. Membership loss ⇒ 16-
-   line note: rooms are re-checked on every subscribe; existing
-   subscriptions are torn down via `member.updated` handling in step 6.
+   sessionId, membershipRoles }` on `socket.data` (sessionId enables the
+   revocation kick in step 6).
+4. `subscribeRoom` (ack `{ ok } | { ok:false, code }`): the incoming
+   payload is **zod-validated against the shared schema before any
+   lookup** (DESIGN §19.2 — malformed payloads ack `VALIDATION_FAILED`);
+   then `roomAccess` (member or observer) → join `room:<id>`;
+   quiet-hours hook `wsQuietGate(socket, spaceId)` (no-op until 29) may
+   refuse with `QUIET_HOURS_ACTIVE`. `unsubscribeRoom` likewise
+   validated. Note: access is re-checked on every subscribe; existing
+   subscriptions of a user who loses access are torn down by the
+   `member.updated` handling in step 6.
 5. `wsEmitter` service (`src/ws/emitter.ts`): typed
    `emitToRoom/Space/SpaceGuardians/User(event, payload)` — validates
    payload with the shared schema in development, fire-and-forget in
@@ -48,7 +57,7 @@ notification events (27/37), presence/typing (v2).
 6. Producers wired now:
    - 14 hooks: `onMessageCreated` → `message.created` to room;
      `onMessageDeleted` → `message.deleted`.
-   - 13 flows: room create/archive/membersUpdate → `room.updated` to
+   - 13 flows: room create/archive/updateMembers → `room.updated` to
      space; membership changes → `member.updated` to space **and** force
      re-evaluation: on `member.updated` the server walks sockets of the
      affected user and makes them leave rooms/spaces they lost access to
@@ -73,14 +82,19 @@ notification events (27/37), presence/typing (v2).
       the only emit path (grep-style meta test: no direct `io.emit` outside
       `src/ws/`).
 - [ ] Channel security proven: cross-tenant, adult-only-room, and
-      post-removal cases.
+      post-removal cases; malformed subscribe payloads rejected by schema
+      validation before any DB lookup (test).
 - [ ] Multi-instance fanout works via Redis adapter (test).
-- [ ] `/ws` path proxied cleanly in dev (document Next.js rewrite for 20).
+- [ ] `apps/api/README.md` gains a "WS behind proxies" note (path `/ws`,
+      upgrade requirements, the dev-rewrite rule that issue 20
+      implements and issue 49 mirrors in Caddy).
 
 ## Validation
 
 ```bash
-pnpm --filter @famchat/api test -- --grep "ws|realtime"
+pnpm -w typecheck
+pnpm --filter @famchat/shared test
+pnpm --filter @famchat/api test -- -t ws
 ```
 
 ## Dependencies

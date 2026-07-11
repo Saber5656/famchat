@@ -26,23 +26,33 @@ Out of scope: client rendering (22/43), notification badge totals (37/39).
    code); validates message belongs to room; **monotonic**: update only if
    `messageId > current` (ULID string compare); emits `receipt.updated`
    to the room on actual change; idempotent otherwise.
-2. `receipts.roomReaders({ spaceId, roomId })` — returns
-   `{ userId, lastReadMessageId }[]` for room members (observer guardians
-   may query); clients derive per-message read-by sets locally.
+2. `receipts.roomReaders({ spaceId, roomId })` — authorization via
+   `roomAccess` exactly like `messages.list`: members and observer
+   guardians may query; adult-only rooms return `NOT_FOUND` to
+   non-member guardians; cross-tenant denied (tests restate all three).
+   Returns `{ userId, lastReadMessageId }[]` for room members; clients
+   derive per-message read-by sets locally.
 3. `rooms.list` integration: replace placeholder `unreadCount` with the
    DESIGN §7.7 query (messages newer than my pointer, not mine, not
    deleted), and `lastMessage` preview via the 14 DTO (respecting
-   redaction); one query per space using lateral joins (provide the exact
-   SQL in a Prisma `$queryRaw` typed helper if the ORM shape is awkward —
-   raw allowed here as a reviewed exception, note in code).
+   redaction); one query per space using lateral joins. Observer-access
+   rooms (guardian, no room_members row) return `unreadCount: null` —
+   observers have no read pointer by design (no receipts, no unread
+   badge; DESIGN §10.1 "no notifications unless member"); clients render
+   no badge for null. If the ORM shape is awkward, a Prisma `$queryRaw`
+   typed helper is allowed as a **documented reviewed exception** to
+   DESIGN §19.2: parameterized placeholders only, zero string
+   interpolation, output mapped to DTOs, a code comment citing this
+   issue, and an injection regression test.
 4. `messages.list` marks nothing automatically — explicit `markRead` from
    clients only (scroll-position-driven; client issues).
 5. Tests: monotonic guard (stale markRead is a no-op, no event); unread
-   math excludes own + deleted messages; empty-room zero; observer blocked
-   from markRead but allowed roomReaders; WS event received by second
-   client; cross-tenant denial; unread performance sanity (≤ 30 rooms ×
-   1000 msgs seeded — list completes < 300 ms locally, soft assertion
-   logged not failed).
+   math excludes own + deleted messages; empty-room zero; observer rooms
+   report `unreadCount: null`; observer blocked from markRead but allowed
+   roomReaders; adult-only room roomReaders → `NOT_FOUND` for non-member
+   guardian; WS event received by second client; cross-tenant denial;
+   unread performance sanity (≤ 30 rooms × 1000 msgs seeded — list
+   completes < 300 ms locally, soft assertion logged not failed).
 
 ## Acceptance Criteria
 
@@ -55,7 +65,8 @@ Out of scope: client rendering (22/43), notification badge totals (37/39).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/api test -- --grep receipt
+pnpm -w typecheck
+pnpm --filter @famchat/api test -- -t receipt
 ```
 
 ## Dependencies

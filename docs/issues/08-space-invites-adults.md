@@ -32,8 +32,9 @@ sending (links are shared via existing family channels by design), UI (32).
    (active/used/expired/revoked), role, creator, expiry — never the code.
 4. `invites.revokeSpaceInvite({ spaceId, inviteId })` — guardian-only.
 5. `invites.previewInvite({ code })` — **unauthenticated**; returns
-   `{ spaceName, role, valid: true }` or `INVITE_INVALID_OR_EXPIRED`; rate
-   limited 5/15 min/IP; no other space metadata leaks.
+   `{ spaceName, role, valid: true }` or `INVITE_INVALID_OR_EXPIRED`; no
+   other space metadata leaks. Rate limits (route-local here, centralized
+   in 12): preview AND accept each 5/15 min/IP per DESIGN §19.5.
 6. `invites.acceptSpaceInvite({ code, newUser?: { email, password,
    displayName, locale, tosAccepted: true } })` — logged-out requires
    `newUser` (same registration rules as 07 incl. consent timestamp);
@@ -42,14 +43,16 @@ sending (links are shared via existing family channels by design), UI (32).
    `already_member` detail), child accounts cannot accept, suspended space.
    Creates membership with the invite's role; emits notify event
    `member.joined` (stub) to space members; audit `invite.create/revoke/
-   accept`, `member` metadata.
+   accept` with member metadata — via the 06 audit interface (spy-tested
+   here; persisted rows re-asserted in 11).
 7. Guardian-invite hygiene: accepting a `guardian` invite grants guardian
    role but **not** ownership.
 8. Integration tests: full accept happy paths (new + existing user); expiry
    honored (time-travel via injected clock or direct row edit); one-time
    enforcement under parallel accepts; preview leaks nothing on invalid;
    revoked cannot be accepted; already-member rejection; cross-space code
-   cannot be replayed elsewhere (code is bound to its space row); audit rows.
+   cannot be replayed elsewhere (code is bound to its space row); audit
+   emissions (spy); accept rate limit trips on the 6th attempt/IP.
 
 ## Acceptance Criteria
 

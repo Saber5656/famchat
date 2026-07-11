@@ -272,7 +272,7 @@ Conventions:
 
 ### 6.2 Child auth (device link)
 
-1. Guardian, in guardian console: "link device" for child → API creates `child_link_codes` row: 6-digit numeric code + QR payload `famchat://link?code=…&s=<spaceId>` (hash stored, 10-min expiry, one-time).
+1. Guardian, in guardian console: "link device" for child → API creates `child_link_codes` row: 6-digit numeric code + QR payload `${APP_BASE_URL}/link#c=<code>&s=<spaceId>` (hash stored, 10-min expiry, one-time). The code rides in the URL **fragment**: any camera app can open the link, the fragment is never sent to servers (keeps codes out of web/proxy logs), the web `/link` page reads it client-side, and the universal link opens the mobile app when installed.
 2. Child device (mobile app or web) enters code / scans QR → `auth.childLink` verifies → creates a **device session** (kind `device_link`, 180-day expiry, sliding) bound to the child user, and returns session token.
 3. Guardian console lists child devices (session records) and can revoke any of them instantly.
 4. Optional per-child **PIN** (4–6 digits): client-side app lock to deter siblings; verified locally against a server-fetched-at-unlock check; explicitly **not a security boundary** (revocation is). Guardians set/reset it.
@@ -326,7 +326,7 @@ Types: `id` = ULID text PK; `ts` = timestamptz; enums are Prisma enums (Postgres
 
 ### 7.2 Messaging
 
-**rooms**: id, space_id FK cascade, type enum `family,group,direct`, name text null (null for family/direct; derived display), created_by, archived_at null, created_at. Exactly one `family` room per space (partial unique index).
+**rooms**: id, space_id FK cascade, type enum `family,group,direct`, name text null (null for family/direct; derived display), direct_key text null unique (sorted member-id pair `"<idA>:<idB>"`, set only for direct rooms — dedupe key), created_by, archived_at null, created_at. Exactly one `family` room per space (partial unique index).
 
 **room_members**: room_id FK cascade + user_id FK (composite PK), added_by, notify enum `all,none` default `all`, last_read_message_id text null, joined_at. Index (user_id).
 
@@ -352,7 +352,7 @@ Message invariants: `text` ⇒ body non-empty; `image` ⇒ attachment_id set, bo
 
 **custom_ng_words**: id, space_id FK cascade, term text 1–50, normalized_term text, added_by, created_at. Unique (space_id, normalized_term).
 
-**audit_logs**: id, space_id FK null (null = instance-level), actor_kind enum `user,operator,system`, actor_id text null, action text (catalog constant, e.g. `member.remove`), target_type text null, target_id text null, metadata jsonb, ip inet null, created_at. Append-only (no update/delete API). Index (space_id, created_at DESC).
+**audit_logs**: id, space_id text null (**no FK by design** — audit rows must survive space deletion until purge; null = instance-level), actor_kind enum `user,operator,system`, actor_id text null, action text (catalog constant, e.g. `member.remove`), target_type text null, target_id text null, metadata jsonb (allowlisted fields only — never raw codes/tokens/passwords), ip inet null, created_at. Append-only (no update/delete API). Space purge (§ issue 36) explicitly deletes the space's audit rows (family privacy wins) while writing an instance-level `space.purged` record. Index (space_id, created_at DESC).
 
 **space_exports**: id, space_id FK cascade, requested_by, status enum `pending,running,ready,failed,expired`, file_key null, expires_at null, created_at / updated_at.
 
@@ -404,14 +404,14 @@ Namespaces and procedures (input/output zod schemas live in `packages/shared/src
 
 ### 8.3 Error model
 
-`packages/shared/src/errors.ts` defines `FamchatErrorCode` string union; tRPC errors carry `{ code: TRPCErrorCode, cause: FamchatErrorCode, message }`. Canonical codes (non-exhaustive): `AUTH_INVALID_CREDENTIALS`, `AUTH_SESSION_EXPIRED`, `INVITE_INVALID_OR_EXPIRED`, `PERMISSION_DENIED`, `NOT_A_MEMBER`, `ROOM_ARCHIVED`, `QUIET_HOURS_ACTIVE` (includes `until` timestamp), `CONTENT_BLOCKED_NG_WORD` (includes matched category count, never the matched terms), `UPLOAD_TOO_LARGE`, `UPLOAD_TYPE_UNSUPPORTED`, `ATTACHMENT_NOT_READY`, `RATE_LIMITED`, `LAST_GUARDIAN`, `VALIDATION_FAILED`. Client i18n maps codes → localized messages; server never localizes errors.
+`packages/shared/src/errors.ts` defines `FamchatErrorCode` string union; the wire shape is: tRPC error `code` (transport class, e.g. `FORBIDDEN`) + `message` + `data: { cause: FamchatErrorCode, details?: Record<string, unknown> }` — clients branch on `error.data.cause`. Canonical codes (non-exhaustive): `AUTH_INVALID_CREDENTIALS`, `AUTH_SESSION_EXPIRED`, `INVITE_INVALID_OR_EXPIRED`, `PERMISSION_DENIED`, `NOT_A_MEMBER`, `ROOM_ARCHIVED`, `QUIET_HOURS_ACTIVE` (includes `until` timestamp), `CONTENT_BLOCKED_NG_WORD` (includes matched category count, never the matched terms), `UPLOAD_TOO_LARGE`, `UPLOAD_TYPE_UNSUPPORTED`, `ATTACHMENT_NOT_READY`, `RATE_LIMITED`, `LAST_GUARDIAN`, `VALIDATION_FAILED`. Client i18n maps codes → localized messages; server never localizes errors.
 
 ### 8.4 Conventions
 
 - All list endpoints: cursor pagination `{ cursor?: string, limit?: number≤50 }` → `{ items, nextCursor? }`.
-- All mutations idempotent where feasible (`sendText` accepts client `dedupeId` ULID; unique (sender, dedupeId) within 24 h).
+- All mutations idempotent where feasible (`sendText` accepts a client-generated `dedupeId` ULID; uniqueness of (sender, dedupeId) is permanent — client ULIDs make accidental reuse practically impossible, so no expiry window is needed).
 - Server clock is authoritative; clients never write timestamps.
-- Every mutation runs: session → membership/permission check (§13.1 matrix as code) → zod input → quiet-hours gate (children) → moderation pipeline (content types) → write + audit (privileged actions) → WS emit + notification enqueue.
+- Every mutation runs, in this exact order: session → membership/permission check (§13.1 matrix as code) → zod input → object-state checks (e.g. room archived, attachment ready) → quiet-hours gate (children) → moderation pipeline (content types) → write + audit (privileged actions) → post-commit WS emit + notification enqueue.
 
 ---
 
@@ -467,7 +467,7 @@ Client → server: `subscribeRoom { roomId }` / `unsubscribeRoom` (ack with erro
 
 ```
  client sendText/sendImage
-   └─ validate (auth → membership → quiet hours → zod → attachment ready?)
+   └─ validate (auth → membership → zod → room state/attachment ready → quiet hours)
         └─ moderation pipeline (§13.4)
              ├─ clean   → INSERT status=clean   → WS message.created → notify fanout
              ├─ flagged → INSERT status=flagged → WS message.created (all) +
@@ -584,7 +584,7 @@ States: `open → resolved | dismissed` (guardian action with optional note). Re
 
 ### 13.8 Audit log action catalog (constants in `packages/shared/src/audit.ts`)
 
-`auth.login`, `auth.login_failed`, `auth.password_reset`, `session.revoke`, `space.create`, `space.settings_update`, `space.delete_request`, `space.delete_cancel`, `space.ownership_transfer`, `invite.create`, `invite.revoke`, `invite.accept`, `member.remove`, `member.role_change`, `member.leave`, `child.create`, `child.update`, `child.link_code_create`, `child.device_link`, `child.device_revoke`, `child.pin_set`, `child.remove`, `room.create`, `room.archive`, `room.members_update`, `message.delete_any`, `board.delete_any`, `board.pin`, `moderation.resolve`, `moderation.word_add`, `moderation.word_remove`, `report.resolve`, `report.dismiss`, `quiet_hours.update`, `export.request`, `export.download`, `admin.*` (per admin endpoint). Guardian-visible subset: space-scoped actions only; auth events visible to the acting user only.
+`auth.login`, `auth.login_failed`, `auth.password_reset`, `session.revoke`, `space.create`, `space.settings_update`, `space.delete_request`, `space.delete_cancel`, `space.ownership_transfer`, `invite.create`, `invite.revoke`, `invite.accept`, `member.remove`, `member.role_change`, `member.leave`, `child.create`, `child.update`, `child.link_code_create`, `child.device_link`, `child.device_revoke`, `child.pin_set`, `child.remove`, `room.create`, `room.archive`, `room.members_update`, `message.delete_any`, `board.delete_any`, `board.pin`, `moderation.resolve`, `moderation.word_add`, `moderation.word_remove`, `report.resolve`, `report.dismiss`, `quiet_hours.update`, `export.request`, `export.download`, `admin.*` (per admin endpoint), `space.purged` (instance-level). Guardian-visible subset: space-scoped actions only. `auth.*` and `session.*` events are instance-level (operator-visible via §13.7) and are not exposed to end users in v1 (a "my security events" view is a v2 candidate).
 
 ---
 
@@ -717,7 +717,7 @@ CSP (web): `default-src 'self'; script-src 'self'; img-src 'self' blob: https://
 | admin API | 60 / min / token |
 | global HTTP | 300 / min / IP (Caddy) |
 
-`RATE_LIMITED` responses include `retryAfter`. Limits are constants in `packages/shared/src/limits.ts`.
+`RATE_LIMITED` responses include `details.retryAfterSec` (canonical field name). Limits are constants in `packages/shared/src/limits.ts`; keys enforced at the edge (Caddy) are marked `scope: 'edge'` and excluded from the API-side enforcement map. **Limiter availability policy**: if Redis is unavailable, rate limiting fails **closed** for credential/invite-class routes (login, reset, invite preview/accept, child link, PIN — request rejected `RATE_LIMITED`) and fails **open** for ordinary content routes — availability degradation is preferred over brute-force exposure on secrets, and accepted over availability on chat.
 
 ### 19.6 Secret handling rules
 

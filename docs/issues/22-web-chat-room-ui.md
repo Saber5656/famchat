@@ -32,28 +32,45 @@ queue; the in-room guardian flag badge ships here reading
    (key+params from 14), deleted tombstones, guardian-only flag badge when
    `moderationStatus='flagged'` (DESIGN §10.2 rendering rule).
 2. Link policy (DESIGN §19.3 XSS row): URLs in message text render as
-   **plain text for child viewers**; for adults/guardians, linkified with
-   `rel="noopener noreferrer" target="_blank"` behind a confirm dialog
-   showing the full URL. No other markup ever interpreted.
+   **plain text for child viewers**; for adults/guardians, linkification
+   applies **only to `http:`/`https:` URLs (explicit scheme allowlist —
+   `javascript:`, `data:`, `famchat:` and everything else stay plain
+   text)**, with `rel="noopener noreferrer" target="_blank"` behind a
+   confirm dialog showing the full URL. No other markup ever
+   interpreted; the allowlist is unit-tested with hostile fixtures.
 3. Composer: textarea auto-grow (max 6 rows), 4000-char counter past 3500,
-   Enter=send / Shift+Enter=newline (IME-composition-safe: ignore Enter
-   during `compositionend` handling — test with Japanese input), optimistic
+   Enter=send / Shift+Enter=newline (IME-composition-safe: the Enter
+   keydown handler must no-op while `event.isComposing ||
+   event.keyCode === 229` — test with simulated Japanese composition
+   events), optimistic
    append with `dedupeId` (ULID) + pending style; failure → inline retry/
    discard affordances (`QUIET_HOURS_ACTIVE` and `CONTENT_BLOCKED_NG_WORD`
    render their specific friendly messages once 27/29 land — the error
    mapping exists now via `errors.json`); send button ≥ 44 px in kid mode.
-4. Receipts: `receipts.roomReaders` + `receipt.updated` events → per-
-   message compact read-by row of avatar chips under the newest read
-   boundary (family scale: show up to 5 + "+n"); own-message "unread by
-   all" subtle state.
+4. Receipts: `receipts.roomReaders` + `receipt.updated` events joined
+   against the member roster from `rooms.get` (roomReaders returns
+   `{ userId, lastReadMessageId }` only — displayName/avatar come from
+   the room members cache) → per-message compact read-by row of avatar
+   chips under the newest read boundary (family scale: show up to 5 +
+   "+n"); own-message "unread by all" subtle state.
+4b. Delete affordances: kebab/long-press menu shows "delete" on own
+   messages (all roles) and on any message for guardians — including
+   observer mode (DESIGN §13.1 `message.deleteAny` has no membership
+   precondition); confirm dialog (child-register variant for children);
+   result renders the tombstone for everyone via `message.deleted`.
 5. markRead: fire `receipts.markRead` with the newest visible message id
    when (a) room opened focused, (b) window refocus, (c) new message
    arrives while scrolled to bottom; never while scrolled up (preserve
    the user's unread boundary).
 6. WS: subscribeRoom on mount / unsubscribe on unmount; `message.created`
    appends (dedupe against optimistic by dedupeId), `message.deleted`
-   tombstones in place; reconnect → refetch since newest known id (the
-   §9.3 contract via `around`/`list`).
+   tombstones in place. Reconnect algorithm (the §9.3 contract, made
+   concrete against 14's API): fetch the newest page
+   (`messages.list({ roomId, limit: 50 })`); if it overlaps the cached
+   newest id, merge by id; if there is no overlap (gap larger than one
+   page), reset the room cache to that newest page (older history
+   re-loads via normal upward pagination) — never attempt to walk the
+   gap.
 7. Oversight notice (child sessions): permanent slim banner in the room
    header — `safety.oversight_notice` ja: 「おうちの ひとも よめます」 with
    furigana, en: "Your family grown-ups can read this" (DESIGN §13.3 hard
@@ -82,7 +99,8 @@ queue; the in-room guardian flag badge ships here reading
 ## Validation
 
 ```bash
-pnpm --filter @famchat/web test -- --grep chat
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/web test -- -t chat
 pnpm --filter @famchat/web exec playwright test --grep @chat
 ```
 

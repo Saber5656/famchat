@@ -22,33 +22,53 @@ delivery (37).
 
 ## Detailed Requirements
 
-1. Migration per DESIGN §7.3 + `boardNotify enum(all,none) default all` on
-   memberships. `board_post_attachments` composite PK (postId,
-   attachmentId) + `position int` (0–3).
+1. Migration per DESIGN §7.3 + `board_notify enum(all,none) default all`
+   on memberships. `board_post_attachments` composite PK (post_id,
+   attachment_id) + `position int` (0–3) **+ unique index on
+   `attachment_id` alone** — combined with `messages.attachment_id`
+   uniqueness (14/17), this makes the DESIGN §12.1 single-use invariant
+   database-enforced in both directions; the claim algorithm must check
+   `messages.attachment_id IS NULL` for the attachment before inserting
+   the join row inside one transaction (and vice versa in 14's claim).
 2. `board.createPost({ spaceId, title, body, attachmentIds?[≤4] })` —
    permission `board.post` (all roles); pipeline order per §8.4 (quiet-
-   hours hook, moderation hook on title+body); attachments claimed
-   atomically into the join table (same guard pattern as sendImage; an
-   attachment claimed by a message cannot be claimed by a post and vice
-   versa — cross-claim test); post-commit `onBoardPostCreated` (WS
-   `board.postCreated` to space + notify stub).
+   hours hook, moderation hook on title+body); attachments claimed per
+   the req-1 transactional algorithm (cross-claim tested both
+   directions); post-commit `onBoardPostCreated` (WS `board.postCreated`
+   to space + notify stub). **Quiet-hours scope note**: every
+   child-authored `board.*` mutation in this issue (createPost,
+   updatePost, deletePost, createComment, deleteComment, setNotify)
+   calls the `assertNotQuiet` hook — issue 29 activates it and its
+   procedure list must match this set.
 3. `board.updatePost({ spaceId, postId, title?, body? })` — author only,
    within 15 min of createdAt (`VALIDATION_FAILED details.editWindow`
    after); re-runs moderation hook; attachments immutable after create
    (v1 simplification).
-4. `board.deletePost` — own or `board.deleteAny` (guardian; audited
-   `board.delete_any`); soft delete; comments render under a tombstoned
-   post.
+4. `board.deletePost({ spaceId, postId })` — own or `board.deleteAny`
+   (guardian; audited `board.delete_any`); soft delete. Deleted-post
+   semantics: excluded from `listPosts`; `getPost({ spaceId, postId })`
+   returns a tombstone DTO (`{ id, deleted: true, author: null, title:
+   null, body: null }`); `listComments` for a tombstoned post remains
+   available (existing comments render under the tombstone header —
+   deep-linked notifications stay resolvable).
 5. `board.pinPost` / `unpinPost` — guardian (`board.pin`); sets/clears
    pinnedAt; audit `board.pin`.
 6. `board.listPosts({ spaceId, cursor? })` — members; pinned first
    (pinnedAt DESC) then createdAt DESC; DTO includes author, counts
    (comments), thumbnails; deleted posts excluded from list (tombstone only
    on direct `getPost` for deep links).
-7. `board.getPost`, `board.listComments({ postId, cursor? })` (ascending),
-   `board.createComment({ spaceId, postId, body })` (pipeline hooks;
-   `board.commentCreated` WS + notify stub), `board.deleteComment` (own or
-   guardian).
+7. `board.listComments({ spaceId, postId, cursor? })` (ascending, cursor =
+   last comment id, 50/page), `board.createComment({ spaceId, postId,
+   body })` (pipeline hooks; `board.commentCreated` WS + notify stub),
+   `board.deleteComment({ spaceId, commentId })` — own, or guardian
+   (guardian path audited `board.delete_any` with targetType
+   `board_comment`). DTO contracts pinned in
+   `packages/shared/src/api/board.ts`: `BoardPostDTO = { id, author:
+   MemberChipDTO|null, title, body, pinnedAt, images: [{ attachmentId,
+   position }], commentCount, createdAt, updatedAt, deleted }`,
+   `BoardCommentDTO = { id, postId, author, body, createdAt, deleted }`
+   — mapper redacts deleted rows exactly like 14's message mapper (no
+   ORM objects serialized; snapshot-tested).
 8. Board notify pref: `board.setNotify({ spaceId, notify })` writes
    membership column (consumed by 37's fanout).
 9. Tests: pin ordering; edit window boundary (14:59 ok, 15:01 rejected via
@@ -73,8 +93,8 @@ pnpm --filter @famchat/db db:migrate && pnpm --filter @famchat/api test -- --gre
 
 ## Dependencies
 
-13 (space/membership context), 18 (ready attachments for image posts; text
-posts testable with 17 alone).
+13 (space/membership context), 15 (WS emits), 18 (ready attachments for
+image posts; text posts testable with 17 alone).
 
 ## Non-goals
 

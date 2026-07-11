@@ -38,22 +38,26 @@ quotas (17).
    tRPC middleware reads meta and consults the limiter — replace the
    route-local implementations from 06–09 (delete them; tests must still
    pass).
-3. `RATE_LIMITED` responses include `details.retryAfterSec` and HTTP 429
-   with `Retry-After` header on REST paths.
+3. `RATE_LIMITED` responses include `details.retryAfterSec` (canonical
+   field per DESIGN §19.5) and HTTP 429 with `Retry-After` header on REST
+   paths.
 4. Hardening baseline on the API server: `bodyLimit: 1_048_576` (1 MiB),
-   `connectionTimeout`/`requestTimeout` sane defaults (30 s), headers on
-   all API responses: `X-Content-Type-Options: nosniff`,
-   `Referrer-Policy: same-origin`, `Cache-Control: no-store` (API responses
-   are personal data). Reject `Content-Type` other than `application/json`
-   on mutating REST routes.
-5. Fail-open policy decision (DESIGN availability vs abuse): if Redis is
-   down, limiter **fails closed for auth routes** (`RATE_LIMITED`) and
-   fails open elsewhere — implement + test both branches; log loudly.
-6. Docs/limits sync: unit test asserts every key in `RATE_LIMITS` is
-   registered in the application map (no dead policies, no unmapped keys —
-   forward-declared keys like `messageSend` map to a placeholder matcher
-   list that later issues extend; the test asserts list membership
-   explicitly so 14/17/19/28 must update it consciously).
+   Fastify options `connectionTimeout: 30_000` and
+   `requestTimeout: 30_000`, headers on all API responses:
+   `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`,
+   `Cache-Control: no-store` (API responses are personal data). Reject
+   `Content-Type` other than `application/json` on mutating REST routes.
+5. Limiter availability policy per DESIGN §19.5 (canonical there): Redis
+   down ⇒ fail **closed** for credential/invite-class policies (login,
+   reset, invite preview/accept, child link, PIN) and fail **open** for
+   content-class policies — implement + test both branches; log loudly.
+6. Docs/limits sync: unit test asserts every key in `RATE_LIMITS` whose
+   `scope` is NOT `'edge'` is registered in the application map (edge
+   keys like `globalHttp` belong to Caddy, issue 49, and are excluded
+   here); no dead policies, no unmapped API keys — forward-declared keys
+   like `messageSend` map to a placeholder matcher list that later
+   issues extend; the test asserts list membership explicitly so
+   14/17/19/28 must update it consciously.
 7. Tests: 6th login within window → 429/`RATE_LIMITED` with retryAfter;
    per-account limit isolates users behind one IP; child-link brute force
    trips at 5; headers present on `/healthz`; body > 1 MiB rejected 413.
@@ -68,12 +72,14 @@ quotas (17).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/api test -- --grep "rate|harden"
+pnpm --filter @famchat/api test -- -t rate
+pnpm --filter @famchat/api test -- -t harden
 ```
 
 ## Dependencies
 
-06 (routes to protect), 05.
+05, 06, 08, 09 (this issue replaces the route-local limiters those
+issues shipped; all their routes must exist).
 
 ## Non-goals
 

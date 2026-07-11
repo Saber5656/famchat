@@ -30,27 +30,46 @@ Out of scope: quiet hours (29), client UIs (20/32/42), PIN verification UX
    exactly one membership ever (enforced here; DESIGN §5.1).
 2. `children.update` (displayName/avatarPreset/locale/birthYear),
    `children.list({ spaceId })` (guardian-only; includes settings summary +
-   device count), `children.remove` — delegates to membership removal
-   semantics (full lifecycle in 36; here: membership → removed, child user
-   status → suspended, all sessions revoked).
+   device count), `children.remove` — membership → removed, child user
+   status → **deleted** (canonical rule: guardian removal of a child ends
+   the account, since v1 children have exactly one space; `suspended`
+   remains operator-only per DESIGN §7.1), all sessions revoked; content
+   retention/purge details in 36.
 3. Link codes: `children.createLinkCode({ spaceId, childUserId })` —
    guardian-only; generates 6-digit numeric code (crypto-random,
    zero-padded); stores sha256; TTL 10 min (`CHILD_LINK_CODE_TTL_MIN`);
    one active code per child (creating a new one revokes prior unused
    codes). Response `{ code, qrPayload, expiresAt }` where `qrPayload =
-   "${APP_BASE_URL}/link?c=<code>&s=<spaceId>"` (web URL doubles as QR
-   content so any camera app works; mobile app intercepts the host).
-4. `auth.childLink({ code, spaceId, client: 'web'|'mobile' })` —
-   unauthenticated; verifies code (hash match, unexpired, unused, space
-   match, child + space active); marks used; creates session kind
-   `device_link` (180-day sliding); returns token/cookie + child user DTO.
-   Rate limit 5/15 min/IP (DESIGN §19.3). On success: notify event
-   `child.device.linked` to all space guardians (stub) + audit
-   `child.device_link` with device user-agent.
-5. Device management: `children.listDevices` (active device_link sessions:
-   created, lastUsed, user-agent) and `children.revokeDevice({ sessionId })`
-   — revocation takes effect on next request AND via the
-   `onSessionRevoked` hook (WS kick once 15 lands).
+   "${APP_BASE_URL}/link#c=<code>&s=<spaceId>"` per DESIGN §6.2 — the
+   code rides in the URL **fragment** so it never reaches server/proxy
+   logs; any camera app opens the web page, and the universal link opens
+   the mobile app when installed.
+4. `auth.childLink({ code, client: 'web'|'mobile' })` — unauthenticated;
+   **code alone identifies the link row** (codes are globally unique:
+   generation retries on hash collision at insert; the `s=<spaceId>` in
+   the QR URL exists only for client routing/display and is never
+   required for redemption — a child typing 6 digits manually must
+   succeed); verifies code (sha256 lookup with `crypto.timingSafeEqual`
+   comparison per DESIGN §19.3, unexpired, unused, child + space
+   active); consumes atomically
+   (conditional UPDATE guard, same pattern as 06's reset tokens); creates
+   session kind `device_link` (180-day sliding); returns token/cookie +
+   child user DTO. Rate limit 5/15 min/IP. On success: notify event
+   `child.device.linked` to all space guardians — enqueued via the
+   issue-05 `NotifyService` interface with the typed `NotifyEvent` union
+   member `{ type: 'child.device.linked', spaceId, childUserId,
+   sessionId }` (this issue adds the member to the union; 37 delivers) —
+   plus audit `child.device_link` with device user-agent.
+5. Device management: `children.listDevices({ spaceId, childUserId })` —
+   guardian-only; active device_link sessions (created, lastUsed,
+   user-agent; never token material) of that child; and
+   `children.revokeDevice({ spaceId, childUserId, sessionId })` —
+   guardian-only; the session must be kind `device_link`, belong to
+   `childUserId`, and that child must have an active membership in
+   `spaceId` (explicit ownership check — cross-space or arbitrary-session
+   revocation must be impossible, tested). Revocation takes effect on
+   next request AND via the `onSessionRevoked` hook (WS kick once 15
+   lands).
 6. PIN: `children.setPin({ spaceId, childUserId, pin: 4–6 digits | null })`
    — stores argon2id hash in `child_settings.pin_hash`; add
    `auth.verifyChildPin({ pin })` (child-session-only, rate limit 5/15 min/
@@ -59,10 +78,12 @@ Out of scope: quiet hours (29), client UIs (20/32/42), PIN verification UX
 7. Audit: `child.create/update/link_code_create/device_link/device_revoke/
    pin_set/remove`.
 8. Integration tests: full link flow happy path; expired/used/foreign-space
-   codes fail identically; new code revokes old; revoked device session is
-   dead; guardians notified (stub spy); child cannot call guardian-only
-   procedures; PIN verify rate-limits; child users cannot log in via
-   `auth.login` (no credentials) — explicit test.
+   codes fail identically; parallel double-redeem of one code admits one
+   session; new code revokes old; revoked device session is dead;
+   revokeDevice rejects sessions of another child / another space / non-
+   device_link kinds; guardians notified (NotifyService spy); child cannot
+   call guardian-only procedures; PIN verify rate-limits; child users
+   cannot log in via `auth.login` (no credentials) — explicit test.
 
 ## Acceptance Criteria
 

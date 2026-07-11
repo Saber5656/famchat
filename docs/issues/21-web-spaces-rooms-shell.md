@@ -24,22 +24,34 @@ Out of scope: chat pane content (22), board pages (24), guardian routes
 
 1. Space switcher in the shell header: current space name; dropdown of my
    memberships (`spaces.list`); last-visited space remembered
-   (localStorage) and used by the root redirect `/` → `/s/<lastOrFirst>`.
+   (localStorage, non-secret) and used by the root redirect `/` →
+   `/s/<lastOrFirst>` — the stored id is validated against `spaces.list`
+   and falls back to the first active membership when stale.
 2. Room list pane (`rooms.list`): sections — pinned family room first,
    active rooms by last activity, archived collapsed at bottom; each row:
    localized room display name (family room name from i18n; direct rooms
    show the other member's displayName + avatar preset icon; group rooms
-   their name), last-message preview (redaction-aware: deleted → tombstone
-   text, image → 📷 + localized "photo"), unread badge (count from 16,
-   99+ cap), notify-off icon when `notify=none`, `observer` badge for
+   their name), last-message preview rendered as **plain text only —
+   never HTML, never linkified** (DESIGN §19.3; redaction-aware: deleted
+   → tombstone text, image → 📷 + localized "photo"), unread badge
+   (count from 16, 99+ cap; null for observer rooms → no badge),
+   notify-off icon when `notify=none`, `observer` badge for
    guardian-observable rooms the guardian isn't a member of (distinct
    visual per DESIGN §13.2 transparency).
 3. Live updates: WS client (socket.io-client wrapper hook
    `useFamchatSocket` created here, reused by 22/39): on
    `message.created/deleted`, `room.updated`, `member.updated`,
-   `receipt.updated` → patch TanStack Query caches (list reorder, unread
-   increments — no full refetch); on reconnect → invalidate rooms list
-   (the DESIGN §9.3 reconnect contract; document in the hook).
+   `receipt.updated` → patch TanStack Query caches; on
+   `session.revoked` → immediately clear all caches and route to
+   `/login` (or `/link`), mirroring the 20 401 handler (DESIGN §9.2 —
+   required in the shared hook, tested); on reconnect → invalidate rooms
+   list (the DESIGN §9.3 reconnect contract; document in the hook).
+   **Unread patch semantics mirror issue 16 exactly**: increment a
+   room's badge on `message.created` only when the sender is not me and
+   the room is not the currently open room (22 owns open-room read
+   behavior); `message.deleted` and any ambiguity → invalidate
+   `notifications.unreadCounts` instead of guessing; observer-access
+   rooms (unreadCount null) never show badges.
 4. Create room: FAB/button gated by `room.createGroup` permission
    (children see a "new direct message" picker only — `room.createDirect`);
    group dialog: name field (30 cap + counter), member multi-select of
@@ -68,7 +80,9 @@ Out of scope: chat pane content (22), board pages (24), guardian routes
 ## Validation
 
 ```bash
-pnpm --filter @famchat/web test && pnpm --filter @famchat/web exec playwright test --grep @shell
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/web test
+pnpm --filter @famchat/web exec playwright test --grep @shell
 ```
 
 ## Dependencies

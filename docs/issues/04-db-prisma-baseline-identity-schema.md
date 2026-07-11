@@ -26,7 +26,13 @@ Out of scope: every table from §7.2–§7.6; demo seed content (52).
    `db:generate`, `db:migrate` (`prisma migrate dev`), `db:deploy`
    (`prisma migrate deploy`), `db:seed`, `db:studio`.
 2. `prisma/schema.prisma`: datasource postgres from `DATABASE_URL`;
-   generator client. Models exactly per DESIGN §7.1:
+   generator client. **Physical naming rule (applies to this and every
+   later migration): DESIGN §7 names are canonical — snake_case tables
+   and columns.** Every model uses `@@map("snake_case_table")` and every
+   multi-word field `@map("snake_case_column")` (e.g. model `Membership`
+   → table `memberships`, field `spaceId` → column `space_id`); all raw
+   SQL in migration files uses the snake_case physical names. Models
+   exactly per DESIGN §7.1:
    - Enums: `UserKind(adult,child)`, `UserStatus(active,suspended,deleted)`,
      `Locale(ja,en)`, `SessionKind(web,mobile,device_link)`,
      `SpaceStatus(active,suspended,pending_deletion,deleted)`,
@@ -37,8 +43,9 @@ Out of scope: every table from §7.2–§7.6; demo seed content (52).
      locale (default ja); birthYear Int?; status (default active);
      createdAt/updatedAt.
    - `Session`: id, userId FK onDelete Cascade, kind, tokenHash @unique,
-     createdAt, expiresAt, lastUsedAt, ip String?, userAgent String?,
-     revokedAt DateTime?; @@index([userId]), @@index([expiresAt]).
+     createdAt, expiresAt, lastUsedAt, ip `String? @db.Inet`, userAgent
+     String?, revokedAt DateTime?; @@index([userId]),
+     @@index([expiresAt]).
    - `PasswordReset`, `InstanceInvite`, `Space`, `Membership`,
      `SpaceInvite`, `ChildLinkCode`, `ChildSettings` — columns/types/
      defaults/uniques exactly as the DESIGN §7.1 tables (memberships
@@ -48,13 +55,17 @@ Out of scope: every table from §7.2–§7.6; demo seed content (52).
    `migration.sql` edits are allowed and reviewed):
    - `CREATE EXTENSION IF NOT EXISTS citext;`
    - Partial unique index: one active owner per space —
-     `CREATE UNIQUE INDEX one_owner_per_space ON "Membership"("spaceId")
-     WHERE "isOwner" = true AND "status" = 'active';`
-4. `src/client.ts`: lazy singleton `export const db = new PrismaClient()`
-   with pino-compatible query logging in development only.
-5. `src/seed.ts` skeleton: creates one instance invite (code printed to
-   stdout once, stored hashed with sha256) when `SEED_MODE=dev`. Full demo
-   data is issue 52 — leave a marked extension point.
+     `CREATE UNIQUE INDEX one_owner_per_space ON memberships (space_id)
+     WHERE is_owner = true AND status = 'active';`
+4. `src/client.ts`: the standard Prisma dev-safe singleton — cache the
+   client on `globalThis` (`const db = globalThis.__famchatDb ??= new
+   PrismaClient(...)`) so hot-reload/test re-imports never create extra
+   connection pools; query-event logging enabled only when
+   `NODE_ENV=development`.
+5. `src/seed.ts` skeleton: when `SEED_MODE=dev`, creates one instance
+   invite whose code follows the issue-07 format (`fi_` + 16 random bytes
+   base64url = 128-bit entropy, printed to stdout exactly once, stored as
+   sha256). Full demo data is issue 52 — leave a marked extension point.
 6. Integration test (vitest, requires issue 02 services): migration deploys
    on a clean DB; creating two active owner memberships in one space
    violates the partial index; email uniqueness is case-insensitive
@@ -70,7 +81,11 @@ Out of scope: every table from §7.2–§7.6; demo seed content (52).
       the integration test using `information_schema` checks for the partial
       index and citext).
 - [ ] Owner-uniqueness and citext tests pass.
-- [ ] `db` client importable from api/worker packages.
+- [ ] Physical schema is fully snake_case (integration test lists
+      `information_schema.tables/columns` and rejects any camelCase name).
+- [ ] Package export shape verified: a fixture consumer tsconfig inside
+      the package's tests type-checks `import { db } from '@famchat/db'`
+      (real consumers arrive in issue 05).
 
 ## Validation
 

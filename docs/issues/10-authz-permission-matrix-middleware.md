@@ -19,17 +19,23 @@ denial semantics.
 In scope: `packages/shared/src/authz.ts`, middleware + context extension,
 procedure-annotation registry + meta test, refactor of 07–09 local checks,
 cross-tenant test helpers.
-Out of scope: room-level access (13 implements `canAccessRoom` using this),
+Out of scope: room-level access (13 implements `roomAccess` (member/observer levels) using this),
 quiet-hours gate (29).
 
 ## Detailed Requirements
 
 1. `packages/shared/src/authz.ts`:
-   - `export const PERMISSIONS = { 'space.updateSettings': { guardian: true, adult: false, child: false }, … } as const satisfies Record<string, Record<Role, boolean>>`
-     — one entry per capability row of DESIGN §13.1, using those exact
-     constant names, including owner-only capabilities expressed as
-     `{ …, ownerOnly: true }`.
-   - `can(role, isOwner, permission): boolean`.
+   - `type PermissionRule = { guardian: boolean; adult: boolean;
+     child: boolean; ownerOnly?: true }` and
+     `export const PERMISSIONS = { 'space.updateSettings': { guardian:
+     true, adult: false, child: false }, 'space.delete': { guardian:
+     true, adult: false, child: false, ownerOnly: true }, … } as const
+     satisfies Record<string, PermissionRule>` — **one key per capability
+     constant** (DESIGN §13.1 rows that group several constants, e.g.
+     `space.updateSettings / space.delete / space.transferOwner`, become
+     one entry each), using those exact constant names.
+   - `can(role, isOwner, permission): boolean` (ownerOnly ⇒ requires
+     guardian AND isOwner).
    - Type `Permission = keyof typeof PERMISSIONS`.
 2. API middleware (`apps/api/src/trpc.ts`):
    - `spaceProcedure` builder: requires authenticated session; expects
@@ -39,11 +45,16 @@ quiet-hours gate (29).
    - `.permission(p: Permission)` chain: evaluates `can()`; throws
      `PERMISSION_DENIED`. Owner-only honored via `membership.isOwner`.
    - `guardianProcedure`, `ownerProcedure` conveniences derived from it.
-3. Annotation registry: each procedure created via these builders registers
-   `{ path, permission | 'member' | 'public' | 'authed' }` into an exported
-   `PROCEDURE_REGISTRY`. A vitest meta-test walks `appRouter._def` and fails
-   if any procedure path is missing from the registry — mechanically
-   preventing unguarded endpoints (DESIGN §13.1).
+3. Annotation registry — concrete mechanism (builders cannot know their
+   final path): every procedure declares
+   `.meta({ authz: Permission | 'member' | 'public' | 'authed' })`; the
+   middleware reads `meta.authz` at call time to enforce. The vitest
+   meta-test walks `appRouter._def.procedures` (path → procedure def),
+   reads each procedure's `meta`, and fails on any procedure whose
+   `meta.authz` is missing — the registry is thus derived from the
+   composed router, not from builder-time state, and unguarded endpoints
+   cannot ship (DESIGN §13.1). Export the walker as
+   `collectProcedureAuthz(appRouter)` for reuse by 54's coverage script.
 4. Refactor issues 07–09 routers onto the builders; delete every
    `TODO(issue-10)` marker; behavior unchanged (tests still green).
 5. Cross-tenant helper in the test harness: `expectCrossTenantDenied(caller,
@@ -70,17 +81,18 @@ quiet-hours gate (29).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/shared test -- --grep authz
+pnpm --filter @famchat/shared test -- -t authz
 pnpm --filter @famchat/api test
 ```
 
 ## Dependencies
 
-07 (uses existing routers to refactor); 08, 09 recommended merged first.
+07, 08, 09 (hard dependencies — this issue migrates all their routers;
+ISSUE_PLAN lists all three).
 
 ## Non-goals
 
-Room-level `canAccessRoom` (13), quiet-hours enforcement (29), per-object
+Room-level `roomAccess` (13), quiet-hours enforcement (29), per-object
 ACLs (not in v1 design).
 
 ## Design References

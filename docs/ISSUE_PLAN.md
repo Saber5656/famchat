@@ -42,16 +42,16 @@ agent. `Deps` = issue numbers that must be completed first.
 | 07 | `07-instance-gate-and-space-creation.md` | Instance invite gate + space creation | M | 06 |
 | 08 | `08-space-invites-adults.md` | Space invites (adult/guardian) | M | 07 |
 | 09 | `09-child-accounts-and-device-link.md` | Child accounts + QR device link | L | 07 |
-| 10 | `10-authz-permission-matrix-middleware.md` | Permission matrix + tRPC authz middleware | M | 07 |
-| 11 | `11-audit-log-foundation.md` | Audit log foundation | M | 10 |
-| 12 | `12-rate-limits-and-http-hardening-baseline.md` | Rate limits + HTTP hardening baseline | M | 06 |
+| 10 | `10-authz-permission-matrix-middleware.md` | Permission matrix + tRPC authz middleware | M | 07,08,09 |
+| 11 | `11-audit-log-foundation.md` | Audit log foundation | M | 06,07,08,09,10 |
+| 12 | `12-rate-limits-and-http-hardening-baseline.md` | Rate limits + HTTP hardening baseline | M | 06,08,09 |
 | 13 | `13-rooms-model-and-api.md` | Rooms model + API (incl. guardian oversight rule) | L | 09,10,11 |
 | 14 | `14-messages-model-and-api.md` | Messages model + API | L | 13 |
 | 15 | `15-realtime-socketio.md` | Realtime socket.io server + event fanout | L | 14 |
 | 16 | `16-read-receipts.md` | Read receipts + unread counts | M | 15 |
 | 17 | `17-attachments-upload-api.md` | Attachment upload API (presigned, quarantine) | M | 12,14 |
 | 18 | `18-image-worker-pipeline.md` | `apps/worker` + image processing pipeline | L | 17 |
-| 19 | `19-board-backend.md` | Bulletin board backend | M | 13,18 |
+| 19 | `19-board-backend.md` | Bulletin board backend | M | 13,15,18 |
 | 20 | `20-web-skeleton-i18n-auth.md` | `apps/web` skeleton: i18n, auth pages, child link page | L | 06,08,09 |
 | 21 | `21-web-spaces-rooms-shell.md` | Web shell: space switcher, room list, unread | M | 16,20 |
 | 22 | `22-web-chat-room-ui.md` | Web chat room UI (list, composer, WS, receipts) | L | 21 |

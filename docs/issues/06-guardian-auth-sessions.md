@@ -54,24 +54,31 @@ Out of scope: registration (07/08), child link (09), TOTP (v2).
      when user exists: token (32 bytes, sha256 stored, 30-min expiry,
      single-use), email via nodemailer/`SMTP_URL` using i18next server
      rendering in the user's locale, link `${APP_BASE_URL}/reset?token=…`.
-   - `resetPassword({ token, newPassword })` → validates, updates hash,
-     marks token used, `revokeAllForUser`.
+   - `resetPassword({ token, newPassword })` → validates, then consumes
+     the token **atomically** (`UPDATE password_resets SET used_at = now()
+     WHERE token_hash = $h AND used_at IS NULL AND expires_at > now()`
+     returning-row guard — zero rows ⇒ `INVITE_INVALID_OR_EXPIRED`-class
+     failure) so concurrent reuse is impossible; updates hash;
+     `revokeAllForUser`.
    - `me()` → `{ user, memberships }` DTO (no hashes/emails of others).
 5. Rate limits (constants from `@famchat/shared/limits`, enforced with the
    issue-05-compatible fastify rate-limit plugin scoped to these routes now;
    issue 12 centralizes): login & reset-request 5/15 min/IP + 10/h/account.
 6. Audit events: `auth.login`, `auth.login_failed` (with IP, no password),
-   `auth.password_reset` — call a temporary `auditStub` if issue 11 not yet
-   merged; wire order in ISSUE_PLAN puts 11 after 06, so emit through a thin
-   `src/services/audit.ts` interface created here and implemented in 11.
+   `auth.password_reset` — emitted through a thin
+   `src/services/audit.ts` **interface created in this issue** whose only
+   implementation here is a debug-log stub (issue 11 adds persistence and
+   re-asserts these events as DB rows). Tests in THIS issue assert emission
+   by spying on the interface, not by querying a table.
 7. Email templates: `packages/i18n/locales/{ja,en}/auth.json` keys
    (`reset.subject`, `reset.body`) — plain-text email, no HTML.
 8. Integration tests: login success sets cookie flags exactly; wrong
-   password → `AUTH_INVALID_CREDENTIALS` and audit row; unknown email same
+   password → `AUTH_INVALID_CREDENTIALS` and audit emission (spy); unknown email same
    error shape/time-class; session expiry honored; sliding renewal updates
    `expiresAt`; logoutAll invalidates other sessions; reset flow end-to-end
    via Mailpit API (`GET :8025/api/v1/messages`) including token single-use
-   and session revocation; suspended user cannot log in; rate limit trips on
+   and session revocation; parallel double-consume of one reset token
+   succeeds exactly once; suspended user cannot log in; rate limit trips on
    6th attempt.
 
 ## Acceptance Criteria

@@ -29,18 +29,30 @@ lifecycle (36), safety settings (30).
    (`UPDATE … WHERE used_count < max_uses RETURNING` guard). Errors map to
    `INVITE_INVALID_OR_EXPIRED` (single code for all failure modes — no
    validity oracle).
-2. `spaces.create` (public procedure, works logged-in or logged-out):
+2. `spaces.create` (public procedure, works logged-in or logged-out;
+   rate-limited 5/15 min/IP route-locally in this issue — it validates
+   invite codes, so it gets the invite-class limit from DESIGN §19.5;
+   issue 12 centralizes):
    input `{ instanceInviteCode, spaceName (1–40), timezone? (IANA,
    validated against `Intl.supportedValuesOf('timeZone')`, default env),
-   locale? , newUser?: { email, password, displayName, locale,
-   tosAccepted: true } }`.
+   locale?: 'ja'|'en', newUser?: { email, password, displayName,
+   locale: 'ja'|'en', tosAccepted: true } }` (locale enums pinned to
+   DESIGN §7.1's `ja|en` everywhere).
+   - **Atomicity: invite consume + user create (when logged-out) + space
+     create + owner membership + session row commit in ONE transaction**;
+     any failure rolls back all of it (the invite is not burned on a
+     failed signup).
    - Logged-out ⇒ `newUser` required: validate password policy (06),
      unique email → create `users` row (kind adult) with
-     `tosAcceptedAt = now()` (column added by this issue's migration),
-     then create session (web/mobile per client) — one transaction.
+     `tosAcceptedAt = now()` (column added by this issue's migration).
    - Logged-in adult ⇒ ignore `newUser`.
    - Create space (status active, defaults per DESIGN §7.1) + membership
      (role guardian, `isOwner: true`).
+   - Output DTO (schema in `packages/shared/src/api/spaces.ts`):
+     `{ space: SpaceDTO, membership: MembershipDTO, sessionToken? }` where
+     `SpaceDTO = { id, name, timezone, defaultLocale, moderationMode,
+     ngBuiltinJa, ngBuiltinEn, status, createdAt }` and `MembershipDTO =
+     { spaceId, userId, role, isOwner, status }` — list/get reuse these.
    - Family-room creation is issue 13; call a `onSpaceCreated(space)` hook
      (no-op now) so 13 plugs in without editing this flow.
 3. Migration: add `tosAcceptedAt DateTime?` to `User` (used by 56's consent
@@ -52,7 +64,8 @@ lifecycle (36), safety settings (30).
    check until issue 10's middleware replaces it (leave `TODO(issue-10)`
    marker the 10 issue removes).
 6. Audit: `space.create`, `invite.accept` (instance kind, metadata
-   `{ inviteId }`).
+   `{ inviteId }`) — emitted via the audit interface from 06 (stub until
+   11 persists; tests spy on the interface).
 7. Suspended space guard: a shared `assertSpaceActive(space)` helper
    returning `SPACE_SUSPENDED` — applied in `spaces.get` now and reused by
    every space-scoped procedure later.
@@ -60,8 +73,13 @@ lifecycle (36), safety settings (30).
    session in one call); happy path logged-in existing adult; exhausted /
    expired / revoked / malformed codes all return
    `INVITE_INVALID_OR_EXPIRED`; concurrent double-spend of a max_uses=1
-   code admits exactly one (parallel test); child users cannot call
-   `spaces.create` (kind check); consent timestamp stored.
+   code admits exactly one (parallel test); rollback test (forced failure
+   after invite consume leaves the invite unburned); child users cannot
+   call `spaces.create` (kind check); consent timestamp stored;
+   `spaces.get` denied for non-members (cross-tenant helper pattern —
+   formalized in 10 but written here directly); `updateSettings` denied
+   for non-guardian member; suspended space returns `SPACE_SUSPENDED` on
+   `spaces.get`; rate limit trips on the 6th create attempt per IP.
 
 ## Acceptance Criteria
 
