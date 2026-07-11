@@ -39,12 +39,28 @@ Out of scope: guardian queue UI (31), mobile (47), backend (28).
    — never "already reported" to a child (documented decision:
    reassurance over precision); adults see a subtle "already sent" toast.
 5. Error handling: rate-limit → gentle wait message; offline → fail with
-   retry affordance (no offline queue in v1); `QUIET_HOURS_ACTIVE` must
-   never surface here (the 29 exemption covers `reports.create`; an
-   integration test in 29 already proves it). Export the dialog as a
-   standalone component (no room-context coupling) so 47 reuses it on
-   mobile; lock-screen contextless reporting is explicitly out of scope
-   (a report always targets specific content or a member).
+   retry affordance (no offline queue in v1); `QUIET_HOURS_ACTIVE` is
+   handled defensively like any mapped error until 29 lands, after which
+   the 29 exemption guarantees it never surfaces (29's integration test
+   proves it); `details.noReviewer: true` (28's sole-guardian case)
+   appends the "talk to another trusted adult" guidance line to the
+   success screen. Component boundary (contract for 47's native
+   re-implementation): `apps/web/src/components/report/ReportDialog.tsx`
+   exporting `ReportDialog({ target: { type: 'message'|'board_post'|
+   'board_comment'|'user', id: string }, spaceId, variant:
+   'child'|'adult', onDone }: Props)` — no room-context coupling;
+   lock-screen contextless reporting is explicitly out of scope (a
+   report always targets specific content or a member).
+6. i18n keys (namespace `safety.report.*`, ja+en both authored here):
+   `reason_unkind` (ja 「いじわる を いわれた」/ en "Someone was
+   unkind"), `reason_scary` (「こわい」/ "It's scary"),
+   `reason_inappropriate` (「よくない ことば や しゃしん」/ "Bad words
+   or pictures"), `reason_other` (「そのほか」/ "Something else"),
+   `confirm_cta` (「おとなの ひとに しらせる」/ "Tell a grown-up"),
+   `success_child` (「つたえたよ。おうちの おとなが みてくれるよ」/
+   "Done! A grown-up in your family will take a look"),
+   `success_no_reviewer_hint` (「ほかの しんらいできる おとなにも
+   はなしてみてね」/ "Please also talk to another adult you trust").
 6. Analytics/telemetry: none (no trackers — DESIGN §22).
 7. Tests: component — child vs adult variant switching by session kind,
    reason payload correctness, self-content menus hide report; Playwright:
@@ -71,7 +87,9 @@ pnpm --filter @famchat/web exec playwright test --grep @report
 
 ## Dependencies
 
-22, 24 (surfaces), 28 (API). Component exported for 47.
+22, 24 (surfaces), 28 (API), 31 (guardian queue UI for the E2E
+round-trip assertion). 29 hardens the quiet-hours guarantee later.
+Component contract consumed by 47.
 
 ## Non-goals
 

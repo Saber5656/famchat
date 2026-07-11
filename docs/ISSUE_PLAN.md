@@ -56,17 +56,17 @@ agent. `Deps` = issue numbers that must be completed first.
 | 21 | `21-web-spaces-rooms-shell.md` | Web shell: space switcher, room list, unread | M | 16,20 |
 | 22 | `22-web-chat-room-ui.md` | Web chat room UI (list, composer, WS, receipts) | L | 21 |
 | 23 | `23-web-image-share-ui.md` | Web image share UI | M | 18,22 |
-| 24 | `24-web-board-ui.md` | Web bulletin board UI | M | 19,21 |
+| 24 | `24-web-board-ui.md` | Web bulletin board UI | M | 19,21,23 |
 | 25 | `25-web-user-settings-ui.md` | Web user settings (profile, locale, sessions) | M | 20 |
 | 26 | `26-moderation-package.md` | `@famchat/moderation`: normalize + matcher + base lists | L | 03 |
 | 27 | `27-moderation-pipeline-integration.md` | Moderation pipeline on all content writes | L | 14,19,26 |
-| 28 | `28-reports-backend.md` | Reports backend | M | 13,11 |
-| 29 | `29-quiet-hours-backend.md` | Quiet hours backend + enforcement | L | 09,13 |
+| 28 | `28-reports-backend.md` | Reports backend | M | 11,13,14,19 |
+| 29 | `29-quiet-hours-backend.md` | Quiet hours backend + enforcement | L | 09,14,16,17,19,25 |
 | 30 | `30-guardian-console-backend.md` | Guardian console backend (overview, removals, settings) | L | 27,28,29 |
-| 31 | `31-web-guardian-dashboard-ui.md` | Web guardian dashboard (flags, reports, children, audit) | L | 22,30 |
+| 31 | `31-web-guardian-dashboard-ui.md` | Web guardian dashboard (flags, reports, children, audit) | L | 22,24,30 |
 | 32 | `32-web-space-admin-ui.md` | Web space admin UI (members, invites, children, settings) | L | 30,21 |
-| 33 | `33-web-report-flow-ui.md` | Web report flow UI (child-friendly) | S | 22,28 |
-| 34 | `34-web-quiet-hours-ux.md` | Web quiet hours UX (lock screen + editor) | M | 29,31 |
+| 33 | `33-web-report-flow-ui.md` | Web report flow UI (child-friendly) | S | 22,24,28,31 |
+| 34 | `34-web-quiet-hours-ux.md` | Web quiet hours UX (lock screen + editor) | M | 25,29,31 |
 | 35 | `35-operator-admin-api-and-cli.md` | Operator admin REST API + `pnpm ops` CLI | M | 07,11,12 |
 | 36 | `36-data-lifecycle-deletion-export.md` | Data lifecycle: deletion, purge, export | L | 18,30,35 |
 | 37 | `37-notification-framework-inapp.md` | Notification framework + in-app feed (worker fanout) | L | 15,18,29 |

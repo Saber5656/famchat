@@ -177,7 +177,7 @@ Tracked in `docs/ISSUE_PLAN.md` §8. Highlights: license final decision (ADR-009
 | `API_BASE_URL` | web (server), mobile build | yes | public https origin of api |
 | `WEB_ORIGINS` | api | yes | comma-separated CORS allowlist |
 | `SESSION_SECRET` | api | yes | ≥ 32 random bytes; cookie signing |
-| `OPERATOR_TOKEN` | api | yes | ≥ 32 random bytes; admin REST auth |
+| `OPERATOR_TOKEN` | api | no | ≥ 32 random bytes when set; **unset ⇒ the `/admin/v1` surface does not exist (404)** — self-hosts may run without operator tooling |
 | `SMTP_URL` | api | yes | `smtp://mailpit:1025` in dev |
 | `MAIL_FROM` | api | yes | `famchat <noreply@…>` |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | api, worker, web | yes (push) | generated once per instance |
@@ -346,7 +346,7 @@ Message invariants: `text` ⇒ body non-empty; `image` ⇒ attachment_id set, bo
 
 ### 7.5 Safety
 
-**moderation_hits**: id, space_id FK cascade, content_type enum `message,board_post,board_comment,display_name`, content_id text, matched_terms jsonb (array of {term, source: builtin_ja|builtin_en|custom}), action enum `flagged,blocked`, resolution enum `pending,approved,removed` default pending, reviewed_by null, reviewed_at null, created_at. Index (space_id, resolution).
+**moderation_hits**: id, space_id FK cascade, content_type enum `message,board_post,board_comment,display_name`, content_id text null (**null when the content was blocked and never created**), matched_terms jsonb (array of {term, source: builtin_ja|builtin_en|custom}), action enum `flagged,blocked`, metadata jsonb null (e.g. sha256 of blocked attempted text — raw attempted text is never persisted), resolution enum `pending,approved,removed` default pending, reviewed_by null, reviewed_at null, created_at. Index (space_id, resolution).
 
 **reports**: id, space_id FK cascade, reporter_id, target_type enum `message,board_post,board_comment,user`, target_id text, reason enum `unkind,scary,inappropriate,other`, note text ≤ 500 null, status enum `open,resolved,dismissed`, resolved_by/at null, resolution_note null, created_at. Index (space_id, status).
 
@@ -398,7 +398,7 @@ Namespaces and procedures (input/output zod schemas live in `packages/shared/src
 - `board`: `q listPosts` (pinned first, cursor), `q getPost`, `m createPost`, `m updatePost` (author, 15-min window), `m deletePost`, `m pinPost`/`m unpinPost`, `m createComment`, `m deleteComment`, `q listComments`.
 - `moderation`: `q flagQueue` (guardian), `m resolveHit` (approve/remove), `q listCustomWords`, `m addCustomWord`, `m removeCustomWord`.
 - `reports`: `m create`, `q queue` (guardian), `m resolve`, `m dismiss`.
-- `guardian`: `q childOverview` (rooms, devices, recent flags/reports per child), `m removeMessage` (any in space), `m setQuietHours`, `q auditLog` (space-scoped, paged).
+- `guardian`: `q dashboard` (space-level counts + per-child mini-status), `q childOverview` (rooms, devices, recent flags/reports per child), `m setQuietHours`, `q auditLog` (space-scoped, paged). (Message removal deliberately has no guardian alias — `messages.delete` with `message.deleteAny` is the single delete path.)
 - `notifications`: `q feed` (cursor), `m markRead`, `m markAllRead`, `m registerPush` (webpush sub / expo token), `m unregisterPush`, `q unreadCounts` (notif + per-room).
 - `exports`: `m request` (owner), `q status`, `q downloadUrl` (302-style presigned).
 
@@ -558,7 +558,7 @@ Child UI permanently shows an oversight notice in room headers and onboarding ("
 
 ### 13.4 NG-word filter pipeline (`packages/moderation`)
 
-- **Normalization** (pure function `normalizeText`): Unicode NFKC → lowercase → katakana→hiragana fold → remove long-vowel marks/whitespace/zero-width/symbol separators between letters → basic leet fold (`0→o, 1→i/l, 3→e, 4→a, @→a, $→s`). Same function normalizes dictionary terms and inputs.
+- **Normalization** (pure function `normalizeText`): Unicode NFKC → lowercase → katakana→hiragana fold → remove long-vowel marks/whitespace/zero-width/symbol separators between letters → basic leet fold (`0→o, 1→i, 3→e, 4→a, @→a, $→s`, plus letter fold `l→i` so `1`/`l` variants converge). Same function normalizes dictionary terms and inputs.
 - **Matching**: Aho–Corasick automaton built per space (built-in ja list if `ng_builtin_ja`, built-in en list if `ng_builtin_en`, plus custom terms), cached in-process keyed by (spaceId, wordlist revision); substring match on normalized text.
 - **Built-in lists**: `packages/moderation/lists/ja.txt`, `en.txt` — curated seed (~150–300 terms each: profanity, sexual, violence/self-harm, bullying phrases), maintained as reviewable plain text with category comments. Quality is a known unknown; lists are data, not code.
 - **Actions**: space `moderation_mode = flag` (default): content is stored & delivered, `moderation_status=flagged`, hit recorded, guardians notified. `block`: content types `message|board_post|board_comment` are refused with `CONTENT_BLOCKED_NG_WORD`; hit recorded; guardians notified. Display names are always block-mode.
@@ -569,12 +569,12 @@ Child UI permanently shows an oversight notice in room headers and onboarding ("
 - Stored per child in `child_settings.quiet_hours` jsonb; zod schema:
   `{ enabled: boolean, rules: Array<{ days: (1..7)[], start: "HH:MM", end: "HH:MM" }> }` — `days` in ISO weekday numbering interpreted in the **space timezone**; windows may cross midnight (start > end ⇒ wraps to next day).
 - Evaluation: pure function `isQuietNow(quietHours, spaceTz, now)` in `packages/shared`; unit-tested incl. midnight wrap and timezone edges (JST default; DST-bearing zones like `Europe/London` in tests).
-- Enforcement points: (1) every child-authored mutation (send/post/comment/report allowed? — **report.create is exempt**, safety trumps time rules); (2) message/room read queries return `QUIET_HOURS_ACTIVE`; (3) WS refuses room subscriptions and emits `quietHours.state`; (4) notification fanout to the child is suppressed during quiet hours (delivered as unread on wake).
+- Enforcement points: (1) every child-authored content mutation; (2) message/room/board read queries return `QUIET_HOURS_ACTIVE`; (3) WS refuses room subscriptions and emits `quietHours.state`; (4) push fanout to the child is suppressed during quiet hours (in-app rows still written; delivered as unread on wake). **Exempt allowlist** (safety and basic account primitives trump time rules; exact constant `QUIET_EXEMPT_PROCEDURES` in `packages/shared`): `reports.create`, `auth.me`, `auth.quietState`, `auth.logout`, `auth.verifyChildPin`, `auth.updateLocale`, `notifications.feed`, `notifications.markRead`, `notifications.markAllRead`, `notifications.unreadCounts`, `spaces.list`, `spaces.get`.
 - Client UX: lock screen with friendly countdown ("あさ 7:00 に あえるよ"); guardians see per-child schedule editor with per-day rows and copy-to-all.
 
 ### 13.6 Reporting flow
 
-States: `open → resolved | dismissed` (guardian action with optional note). Reporter identity visible to guardians only; the reported member is **not** notified (child-protective default; prevents retaliation). Guardian notification on create. Reports targeting content snapshot the content id; if content is later deleted the report remains reviewable (tombstone rendering).
+States: `open → resolved | dismissed` (guardian action with optional note). Reporter identity visible to reviewing guardians only; the reported member is **not** notified (child-protective default; prevents retaliation). **Reported-guardian exclusion**: when the report's target (or the targeted content's author) is themselves a guardian, that guardian is excluded from the queue, WS events, and notifications for that report — only the other guardians review it. If no other guardian exists, the report stays stored (visible to any future guardian) and the reporter's confirmation adds guidance to talk to another trusted adult; the operator does NOT gain content access (§13.7 boundary holds). Guardian notification on create. Reports reference the target id; if content is later deleted the report remains reviewable (tombstone rendering — no content snapshots are persisted).
 
 ### 13.7 Operator admin (instance level)
 

@@ -11,7 +11,7 @@ Status: desk research (agent knowledge, 2026-07). Design impact: DESIGN.md
 | Full/half width variance | ﾊﾞｶ vs バカ, ＡＢＣ vs ABC | Unicode NFKC normalization first |
 | Separator evasion | ば　か, ば.か, ば🌟か | Strip whitespace/symbols/emoji between letters before matching |
 | Long-vowel / small-kana play | ばーか, ばぁか | Remove long-vowel marks; fold small kana to base kana |
-| Leet/lookalike | b4ka, ba_ka | Basic leet fold map (0→o,1→i/l,3→e,4→a,@→a,$→s) |
+| Leet/lookalike | b4ka, ba_ka | Basic leet fold map (0→o, 1→i, 3→e, 4→a, @→a, $→s; letter fold l→i makes 1/l variants converge deterministically) |
 | No word boundaries in ja | substring matching required | Aho–Corasick substring scan (not word-boundary regex) |
 | False positives from substrings | しね inside 施設(しせつ)? — kana-folded text can over-match | Curate list terms ≥ 2 chars with care; flag-not-block default makes false positives low-cost (guardian review, not censorship) |
 

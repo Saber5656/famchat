@@ -31,10 +31,19 @@ Out of scope: API integration, per-space config storage, custom-word CRUD
    U+30F6 → −0x60; also `ヴ`→`ゔ`); 4. remove long-vowel marks (ー U+30FC)
    and iteration marks (ゝゞ々); 5. fold small kana to base
    (ぁぃぅぇぉゃゅょっ→あいうえおやゆよつ); 6. strip separator characters
-   **between** word characters: whitespace, zero-width (U+200B–D, U+FEFF),
-   and Unicode categories P/S (punctuation/symbols incl. emoji); 7. leet
-   fold map `0→o 1→i 3→e 4→a 5→s 7→t 8→b @→a $→s`. Export the map/steps
-   as named constants so tests reference them.
+   **between word characters** — precise predicate: a word character is
+   any code point whose Unicode general category is Letter (L*) or
+   Number (N*) (covers kana/kanji/latin/digits; use the `\p{L}\p{N}`
+   property escapes, NOT `\w`); a separator is any character in
+   categories P*, S*, Z*, or Cf (incl. emoji and zero-width U+200B–D,
+   U+FEFF) occurring between two word characters; 7. leet fold —
+   exactly the canonical DESIGN §13.4 map: digits `0→o 1→i 3→e 4→a` and
+   symbols `@→a $→s`, plus the letter fold `l→i` (this implements the
+   research doc's `1→i/l` rule deterministically: both `1` and `l`
+   normalize to `i`; dictionary terms pass through the same fold so
+   matching stays consistent). No other leet mappings (`5,7,8` are NOT
+   folded — canonical map only). Export the map/steps as named constants
+   so tests reference them.
 3. `src/ahocorasick.ts` — classic trie + BFS failure links + output links;
    `build(terms: string[])` → automaton; `scan(text)` → array of
    `{ term, start, end }`; wholly deterministic; ~150 lines; include the
@@ -49,12 +58,18 @@ Out of scope: API integration, per-space config storage, custom-word CRUD
    `loadBuiltinList(locale)` parses, normalizes each term, dedupes, and
    throws on any term that normalizes to < 2 chars (list hygiene at build
    time).
-5. `src/matcher.ts` — `buildMatcher(config: { builtinJa: boolean,
-   builtinEn: boolean, customTerms: string[] })` → `{ match(text):
-   Hit[] }` where `Hit = { term, source: 'builtin_ja'|'builtin_en'|
-   'custom' }` (deduped by term); `createMatcherCache()` keyed by
-   `(spaceId, wordlistRevision, builtinJa, builtinEn)` with LRU (≤ 200
-   entries) — cache object is exported for the API to own instance-wide.
+5. `src/matcher.ts` — exported API surface (exact signatures):
+   - `buildMatcher(config: { builtinJa: boolean, builtinEn: boolean,
+     customTerms: string[] }): Matcher` where `Matcher = { match(text:
+     string): Hit[] }` and `Hit = { term: string, source: 'builtin_ja'|
+     'builtin_en'|'custom' }` (deduped by term; `match` normalizes its
+     input internally).
+   - `matchText(matcher: Matcher, text: string): Hit[]` — thin
+     convenience wrapper (kept so call sites read declaratively).
+   - `createMatcherCache(limit = 200): MatcherCache` with
+     `get(key: { spaceId, wordlistRevision, builtinJa, builtinEn },
+     build: () => Matcher): Matcher` — LRU; the API owns one instance
+     process-wide (27).
 6. Golden tests (`test/golden.test.ts`): a fixture table of ≥ 40 cases
    pairing raw input → expected hit terms, covering every research-doc
    evasion row (ﾊﾞｶ, ば　か, ばーか, ば🌟か, b4ka, mixed-width, katakana/
@@ -79,8 +94,9 @@ Out of scope: API integration, per-space config storage, custom-word CRUD
 ## Validation
 
 ```bash
-pnpm --filter @famchat/moderation test
+pnpm -w lint
 pnpm --filter @famchat/moderation typecheck
+pnpm --filter @famchat/moderation test
 ```
 
 ## Dependencies

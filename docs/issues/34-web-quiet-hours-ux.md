@@ -36,7 +36,12 @@ Out of scope: backend (29), mobile lock (47), screen-time reports (v2).
 4. Race handling: any API `QUIET_HOURS_ACTIVE` error while unlocked
    (clock skew) → flip to lock using `details.until` (global error hook
    from 20 extended here).
-5. Guardian editor (`/guardian/children/[id]/quiet-hours`): enable
+5. Guardian editor
+   (`/s/[spaceId]/guardian/children/[childUserId]/quiet-hours`) — inside
+   31's guardian route group and inheriting its guardian-only guard; a
+   Playwright denial case proves adult/child/non-member access gets the
+   localized not-available page. This issue also adds the "edit"
+   affordance on 31's read-only quiet-hours summary card. Editor: enable
    toggle; rule rows — day-of-week chip group (Mon–Sun localized), start/
    end time inputs (15-min steps), crossing-midnight visual hint (start >
    end renders a "overnight" badge spanning to next day); add/remove rule
@@ -69,7 +74,9 @@ Out of scope: backend (29), mobile lock (47), screen-time reports (v2).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/web test -- --grep quiet
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/shared test -- -t quiet   # shared fixtures parity
+pnpm --filter @famchat/web test -- -t quiet
 pnpm --filter @famchat/web exec playwright test --grep @quiet
 ```
 

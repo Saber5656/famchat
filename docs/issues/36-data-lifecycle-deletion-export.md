@@ -24,33 +24,48 @@ GDPR-grade tooling (v2), backups (50).
 ## Detailed Requirements
 
 1. Deletion request: `spaces.requestDeletion({ spaceId })` — owner;
-   status → `pending_deletion`, `delete_after = now + 7 days`; space
-   becomes read-only (writes rejected `VALIDATION_FAILED
-   details.pending_deletion`; reads allowed so the family can say
-   goodbye/export); WS `space.updated`; notification type
-   `space.deletion_requested` to all members (this type extends the
-   DESIGN §14.2 catalog — register it in 37's type table; coordination
-   note in both issues); audit `space.delete_request`.
-   `spaces.cancelDeletion` — owner, while pending; restores active;
-   audit `space.delete_cancel`.
+   status → `pending_deletion`, `delete_after = now + 7 days`; the space
+   becomes read-only with an explicit **grace-period allowlist**:
+   permitted during pending_deletion are `spaces.cancelDeletion`,
+   `spaces.get/list`, `members.list`, all content READS, and the
+   `exports.*` procedures (the family must be able to say goodbye and
+   take their data); every other space mutation is rejected
+   `VALIDATION_FAILED details.pending_deletion`. WS `space.updated`;
+   notification type `space.deletion_requested` to all members (this
+   type extends the DESIGN §14.2 catalog — registered in 37's type
+   table; coordination note in both issues); audit
+   `space.delete_request`. `spaces.cancelDeletion` — owner, while
+   pending; restores active; audit `space.delete_cancel`.
 2. Space purge job (worker, repeatable hourly `space-purge`): for spaces
    past `delete_after`: delete S3 prefixes (`m/<spaceId>/`, `q/…`,
-   `exports/<spaceId>/`), then DB rows via cascading deletes in FK order
-   (explicit transaction: content tables → memberships → space; users are
-   NOT deleted — child users whose only membership was here are set
-   status `deleted` + sessions revoked per 09/30 semantics); final status
-   `deleted` tombstone row retained (id, name-hash, deletedAt) for audit
-   integrity; instance-level audit `space.purged` (add to catalog);
-   idempotent + resumable (S3-first then DB, re-entrant on crash).
+   `exports/<spaceId>/`); delete space-scoped `audit_logs` rows (no FK —
+   explicit delete per DESIGN §7.5); delete content/membership rows in
+   FK order; **the `spaces` row itself is anonymized in place, not
+   deleted** (name → `"deleted-<sha256-8>"`, settings nulled, status
+   `deleted`, delete_after null) — it is the tombstone; child users
+   whose only membership was here are set status `deleted` + sessions
+   revoked per 09 semantics; instance-level audit `space.purged` (in
+   the 03 catalog); idempotent + resumable (S3-first then DB,
+   re-entrant on crash).
 3. Soft-deleted content purge (`content-purge`, daily): messages/posts/
    comments with `deleted_at < now - 30 days` → hard-delete rows + any
-   attachment objects (and attachment rows) they claimed; dedupe-id
-   uniqueness rows older than 24 h cleared implicitly by message purge
-   (dedupe window documented in 14).
+   attachment objects (and attachment rows) they claimed. (No dedupe-id
+   cleanup exists: per 14, `(sender_id, dedupe_id)` uniqueness is
+   permanent by design.)
+3b. **Child content purge (guardian-mediated deletion, DESIGN §22)**:
+   `children.remove` (09) gains input `{ purgeContent: boolean }`
+   (default false — family history is kept, attributed to a "removed
+   member" chip). When true, enqueue `child-content-purge` job:
+   hard-delete the child's authored messages/board posts/comments and
+   their claimed attachments (rows + objects), post system messages are
+   left intact; job is idempotent; audit `child.remove` metadata gains
+   `{ purgeContent }`. 32's remove dialog exposes the checkbox with
+   plain-language consequences (ja/en).
 4. Expiry sweeper (`expiry-sweep`, hourly): hard-delete expired+used
    password_resets, child_link_codes, space_invites (expired > 30 d),
    sessions (expired/revoked > 30 d), stale `space_exports` past
-   `expires_at` (+ S3 object).
+   `expires_at` (+ S3 object), and `notifications` rows older than 90
+   days (the retention 37 declares; query helper from 37).
 5. Export: `exports.request({ spaceId })` — owner; one active export at a
    time per space; creates `space_exports` row (pending) + worker job
    `space-export`: builds a zip streamed to
@@ -67,13 +82,17 @@ GDPR-grade tooling (v2), backups (50).
    states with countdown (unskip 32's Playwright cases); export card:
    request button, progress state, download button with expiry note,
    "one at a time" messaging.
-7. Tests: grace-period state machine (request → read-only → cancel →
-   restored; request → time-travel → purge job → gone incl. S3 prefixes
-   emptied against MinIO); purge idempotency (crash-rerun via fault
-   injection between S3 and DB phases); content-purge 30-day boundary;
-   expiry sweeper matrix; export content correctness on a seeded family
-   (zip parsed in test: counts match DB, no foreign-space leakage, media
-   present); export access owner-only + expiry; audit rows throughout.
+7. Tests: grace-period state machine (request → read-only with the
+   exact allowlist verified procedure-by-procedure → cancel → restored;
+   request → time-travel → purge job → gone incl. S3 prefixes emptied
+   against MinIO + spaces row anonymized + space audit rows deleted);
+   purge idempotency (crash-rerun via fault injection between S3 and DB
+   phases); content-purge 30-day boundary; child-content purge (with
+   and without `purgeContent`; system messages survive); expiry sweeper
+   matrix incl. notifications 90-day rule; export content correctness
+   on a seeded family (zip parsed in test: counts match DB, no
+   foreign-space leakage, media present); export access owner-only +
+   expiry; audit rows throughout.
 
 ## Acceptance Criteria
 
@@ -87,8 +106,11 @@ GDPR-grade tooling (v2), backups (50).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/worker test -- --grep "purge|export"
-pnpm --filter @famchat/api test -- --grep "deletion|exports"
+pnpm --filter @famchat/db db:migrate
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/worker test -- -t purge
+pnpm --filter @famchat/worker test -- -t export
+pnpm --filter @famchat/api test -- -t deletion
 pnpm --filter @famchat/web exec playwright test --grep @dangerzone
 ```
 

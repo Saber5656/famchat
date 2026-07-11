@@ -35,13 +35,15 @@ changes (26 owns lists).
      → `{ status: 'clean' } | { status: 'flagged'|'blocked', hits }`
      applying: space mode for message/board types; forced block for
      `display_name` (and room names — treated as display_name type).
-   - On flagged/blocked: insert `moderation_hits` (matched_terms with
-     sources; content_id null for blocked-never-created content — store
-     the **attempted text hash** `sha256` in metadata instead of raw text;
-     raw attempted text is NOT persisted for blocked content, documented
-     privacy choice), emit WS `moderation.flagged` to
-     `space:<id>:guardians`, enqueue notify `moderation.flagged` to
-     guardians.
+   - On flagged/blocked: insert `moderation_hits` per DESIGN §7.5
+     (matched_terms with sources; `content_id` null for blocked-never-
+     created content; `metadata.textSha256` for blocked attempts — raw
+     attempted text is never persisted, canonical privacy rule), emit WS
+     `moderation.flagged` to `space:<id>:guardians`, enqueue notify
+     `moderation.flagged` to guardians — **the enqueued event carries
+     category counts only, never matched terms** (DESIGN §14.1; 37
+     renders from counts; a test asserts term absence from the event
+     payload).
 3. Replace hooks: 14 sendText/sendImage caption; 19 createPost/updatePost/
    createComment; 13 group-room name; 25 displayName. Blocked ⇒
    `CONTENT_BLOCKED_NG_WORD` with `details.categoryCount` only (never the
@@ -51,13 +53,22 @@ changes (26 owns lists).
    (non-guardians still see it rendered normally; DTO hides the status
    from them — already enforced in 14's mapper, extend to board DTOs).
 5. `moderation` router (guardian-gated):
-   - `flagQueue({ spaceId, resolution?, cursor? })` — hits joined with a
-     content snapshot DTO (or tombstone/`blocked` marker), reporter-free
-     (this is the automated queue; reports are 28).
+   - `flagQueue({ spaceId, resolution? (default 'pending'), cursor? })` —
+     ordered id DESC, cursor = last hit id, 50/page; DTO
+     `ModerationHitDTO = { id, contentType, action, resolution,
+     matchedTerms (guardian-visible — full terms with sources, per
+     §13.2), createdAt, content: LiveContentDTO | { deleted: true } |
+     { blocked: true } , author: MemberChipDTO | null, link }` (pinned in
+     `packages/shared/src/api/moderation.ts`; live content joined at
+     read time — no snapshots persisted).
    - `resolveHit({ spaceId, hitId, resolution: 'approved'|'removed',
-     note? })` — `approved` ⇒ content moderation_status→clean;
-     `removed` ⇒ soft-delete the content (reuse 14/19 delete services,
-     attributed to the guardian); audit `moderation.resolve`.
+     note? })` — for hits **with** a content row: `approved` ⇒ content
+     moderation_status→clean; `removed` ⇒ soft-delete the content (reuse
+     14/19 delete services, attributed to the guardian). For hits
+     **without** content (blocked messages/posts, display-name blocks):
+     either resolution simply closes the hit (records reviewer +
+     timestamp; there is nothing to mutate) — explicit rule + tests for
+     both branches. Audit `moderation.resolve`.
    - `listCustomWords`, `addCustomWord({ term })` (validated: 1–50 chars,
      normalizes to ≥ 2 chars, per-space cap 500), `removeCustomWord` —
      each mutation bumps `wordlistRevision` in the same transaction;
@@ -87,7 +98,9 @@ changes (26 owns lists).
 ## Validation
 
 ```bash
-pnpm --filter @famchat/api test -- --grep moderation
+pnpm --filter @famchat/db db:migrate
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/api test -- -t moderation
 ```
 
 ## Dependencies

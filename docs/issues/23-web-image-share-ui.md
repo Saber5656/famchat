@@ -3,8 +3,10 @@
 ## Summary
 
 Add image sending to the web chat composer and image rendering to the
-message list: picker/drag-drop/camera capture, upload progress against the
-presigned flow, processing states, thumbnails, and a lightbox.
+message list: picker/drag-drop/paste, upload progress against the
+presigned flow, processing states, thumbnails, and a lightbox. (No camera
+capture on web — DESIGN §19.4 scopes camera permission to the link page
+only; photos are taken with the device camera app or the mobile app.)
 
 ## Context
 
@@ -26,15 +28,19 @@ here), mobile (44), multi-image messages (one per message by design).
    states `picking → requesting → uploading(pct) → processing → ready |
    failed(reason)`; flow: client-side pre-checks (mime allowlist, size ≤
    `UPLOAD_MAX_BYTES` with friendly error before any network) →
-   `attachments.requestUpload` → `fetch PUT` with progress (XHR for
-   progress events) → `attachments.finalize` → poll `attachments.get`
-   every 1.5 s (cap 60 s → treat as failed `processing_timeout`, keep
-   polling in background and recover if it turns ready).
-2. Composer integration: attach button (image icon, kid-size), drag-drop
-   onto the room pane, paste-from-clipboard; preview thumbnail with
-   remove; optional caption (500 cap, counter); send disabled until
-   `ready`; sending calls `messages.sendImage`; optimistic bubble uses the
-   local object URL until server message arrives.
+   `attachments.requestUpload` → presigned PUT executed via
+   **XMLHttpRequest** (fetch has no upload-progress events; XHR
+   `upload.onprogress` drives the percentage) → `attachments.finalize` →
+   poll `attachments.get` every 1.5 s (cap 60 s → treat as failed
+   `processing_timeout`, keep polling in background and recover if it
+   turns ready).
+2. Composer integration: attach button (image icon, kid-size; opens the
+   OS file picker — on phones the OS sheet itself offers the camera, no
+   in-app camera code), drag-drop onto the room pane,
+   paste-from-clipboard; preview thumbnail with remove; optional caption
+   (500 cap, counter); send disabled until `ready`; sending calls
+   `messages.sendImage`; optimistic bubble uses the local object URL
+   until server message arrives.
 3. Message rendering: image bubbles use `/media/<id>/thumb` (aspect-
    preserving, max 320 px, blur-up placeholder from width/height), click →
    lightbox (`/media/<id>/full`, zoom, download button — adults only for
@@ -51,23 +57,29 @@ here), mobile (44), multi-image messages (one per message by design).
 6. Tests: component tests for the state machine (mock tRPC + XHR: happy,
    too-large pre-check, reject-after-processing, timeout-recover);
    Playwright: real upload of a fixture jpeg through dev api+worker →
-   thumb renders for the second browser; GPS fixture round-trip then
-   assert served full.webp has no EXIF (reuse 18's checker via a test
-   API route or direct S3 read in the test).
+   thumb renders for the second browser; GPS-fixture sanitization
+   assertion — the Playwright spec downloads the served
+   `/media/<id>/full` bytes with the test session's request context and
+   asserts metadata absence **in the Node test process** via
+   `sharp(buffer).metadata()` (no new test API routes, no direct S3
+   credentials in the browser).
 
 ## Acceptance Criteria
 
 - [ ] End-to-end photo share works between two browsers on the dev stack,
       including progress and processing states.
 - [ ] Every failure mode above has a distinct localized message.
-- [ ] No original bytes ever fetched by the app (only `/media` variants —
-      grep test on client code for `q/` absence).
+- [ ] Render-path invariant: the Playwright spec intercepts network
+      requests during chat rendering and asserts every image the app
+      loads is a `/media/...` URL (the presigned `q/` PUT URL is used
+      exactly once, for upload, and never fetched/rendered).
 - [ ] Uploader component API documented for 24's reuse.
 
 ## Validation
 
 ```bash
-pnpm --filter @famchat/web test -- --grep upload
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/web test -- -t upload
 pnpm --filter @famchat/web exec playwright test --grep @image
 ```
 

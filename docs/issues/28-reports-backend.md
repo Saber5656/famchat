@@ -31,15 +31,29 @@ visibility (none in v1 — space-internal only).
    for board/user); **exempt from quiet hours** (29 must whitelist this
    procedure — cross-referenced in both issues); self-reports rejected
    `VALIDATION_FAILED`; duplicate open report by same reporter on same
-   target is idempotent (returns existing); rate limit `reportCreate`
-   10/h/user (12 map). On create: WS `report.created` to
-   `space:<id>:guardians`, notify event `report.new` to guardians, audit
-   none (reports are not audit events; resolution is).
-3. `reports.queue({ spaceId, status?, cursor? })` — guardian-only; DTO:
-   reason, note, reporter (id+displayName — guardians may see reporters,
-   DESIGN §13.6), createdAt, status, and a **content snapshot**: live
-   content DTO when it still exists, else tombstone `{ deleted: true,
-   authorId }`; for `user` targets: member summary.
+   target is idempotent — enforced by a **partial unique index**
+   `(space_id, reporter_id, target_type, target_id) WHERE status='open'`
+   with unique-violation-catch → return existing (race-proof; parallel
+   test); rate limit `reportCreate` 10/h/user (12 map). On create: WS
+   `report.created` to `space:<id>:guardians`, notify event `report.new`
+   to guardians **via the 05 `notify.enqueue` stub — delivery is 37's
+   job; tests here spy the typed enqueue only**; audit none (reports are
+   not audit events; resolution is).
+   **Reported-guardian exclusion (DESIGN §13.6)**: if the target (or the
+   targeted content's author) is a guardian, exclude that guardian from
+   the queue results, the WS guardian-channel event (emit to the
+   remaining guardians' user channels instead), and the notify
+   recipients. When zero eligible reviewers remain, the report is still
+   stored (reviewable by any future guardian) and the create response
+   carries `details.noReviewer: true` so clients (33/47) add the
+   "talk to another trusted adult" guidance.
+3. `reports.queue({ spaceId, status?, cursor? })` — guardian-only (minus
+   the reported-guardian exclusion above); DTO: reason, note, reporter
+   (id+displayName — reviewing guardians may see reporters, DESIGN
+   §13.6), createdAt, status, and the target rendered **live at read
+   time** (no snapshot columns exist — DESIGN §7.5): current content DTO
+   when it still exists, else tombstone `{ deleted: true, authorId }`;
+   for `user` targets: member summary.
 4. `reports.resolve({ spaceId, reportId, note? })` /
    `reports.dismiss({ … })` — guardian; sets status/resolver/timestamp;
    audit `report.resolve` / `report.dismiss`. Resolution does **not**
@@ -52,10 +66,13 @@ visibility (none in v1 — space-internal only).
    guardian queue DTO.
 6. Tests: create for each target type incl. visibility guard (cannot
    report a message in a room the reporter can't access); child reporter
-   path; idempotent duplicate; self-report rejection; queue filtering +
-   snapshot-after-deletion; resolve/dismiss audits; guardian-only
-   enforcement; cross-tenant sweep; rate limit trip; quiet-hours exemption
-   placeholder test marked to activate with 29 (skip-with-reason).
+   path; idempotent duplicate under parallel submission (index-proven);
+   self-report rejection; queue filtering + tombstone-after-deletion;
+   reported-guardian exclusion (queue/WS/notify all exclude; sole-
+   guardian case returns noReviewer and stores); resolve/dismiss audits;
+   guardian-only enforcement; cross-tenant sweep; rate limit trip;
+   quiet-hours exemption placeholder test marked to activate with 29
+   (skip-with-reason).
 
 ## Acceptance Criteria
 
@@ -72,8 +89,8 @@ pnpm --filter @famchat/api test -- --grep reports
 
 ## Dependencies
 
-13 (visibility), 11 (audit), 19 (board targets). 29 wires the quiet-hours
-exemption; 37 delivers notifications.
+11 (audit), 13 (visibility), 14 (message targets), 19 (board targets).
+29 wires the quiet-hours exemption; 37 delivers notifications.
 
 ## Non-goals
 

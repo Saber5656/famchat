@@ -30,11 +30,14 @@ Out of scope: quiet hours (29), client UIs (20/32/42), PIN verification UX
    exactly one membership ever (enforced here; DESIGN §5.1).
 2. `children.update` (displayName/avatarPreset/locale/birthYear),
    `children.list({ spaceId })` (guardian-only; includes settings summary +
-   device count), `children.remove` — membership → removed, child user
-   status → **deleted** (canonical rule: guardian removal of a child ends
-   the account, since v1 children have exactly one space; `suspended`
-   remains operator-only per DESIGN §7.1), all sessions revoked; content
-   retention/purge details in 36.
+   device count), `children.remove({ spaceId, childUserId, purgeContent:
+   boolean (default false) })` — membership → removed, child user status
+   → **deleted** (canonical rule: guardian removal of a child ends the
+   account, since v1 children have exactly one space; `suspended`
+   remains operator-only per DESIGN §7.1), all sessions revoked;
+   `purgeContent: true` enqueues the child-content-purge job specified
+   in 36 (until 36 lands, the flag is accepted and the enqueue is a
+   typed no-op with `TODO(issue-36)`).
 3. Link codes: `children.createLinkCode({ spaceId, childUserId })` —
    guardian-only; generates 6-digit numeric code (crypto-random,
    zero-padded); stores sha256; TTL 10 min (`CHILD_LINK_CODE_TTL_MIN`);

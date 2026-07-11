@@ -25,19 +25,23 @@ dashboards (v2), user data export (36 handles space export via owner).
 
 1. Plugin `apps/api/src/rest/admin.ts`, prefix `/admin/v1`:
    - Auth: `Authorization: Bearer <OPERATOR_TOKEN>`; constant-time
-     comparison (`crypto.timingSafeEqual` over sha256 digests); missing
-     env `OPERATOR_TOKEN` ⇒ plugin registers a 404 catch-all (surface
-     absent, not 401 — probing yields nothing).
+     comparison (`crypto.timingSafeEqual` over sha256 digests).
+     `OPERATOR_TOKEN` is **optional** in the env schema (canonical:
+     DESIGN §3.4; this issue also relaxes it in 03's `apiEnvSchema` —
+     min-32-bytes validated only when present): unset ⇒ the plugin
+     registers a 404 catch-all (surface absent, not 401 — probing
+     yields nothing; self-hosts may run without operator tooling).
    - No CORS headers ever on this prefix; `Cache-Control: no-store`;
      rate limit `adminApi` 60/min/token (12 map).
    - Every request audited (`actor_kind='operator'`, action
      `admin.<method>_<path>` normalized, metadata: params minus body
      secrets, ip).
 2. Endpoints (zod-validated, JSON):
-   - `POST /instance-invites { note?, maxUses=1, expiresInDays? }` →
-     `{ code }` (returned once; stored hashed; code format from 07).
-   - `GET /instance-invites` → list (status, note, uses, expiry — no
-     codes).
+   - `POST /instance-invites { note? ≤ 200, maxUses? 1–100 (default 1),
+     expiresInDays? 1–90 (default 30) }` → `{ id, code }` (code
+     returned exactly once; stored hashed; format from 07).
+   - `GET /instance-invites` → `[{ id, status, note, maxUses,
+     usedCount, expiresAt, createdAt }]` — never codes.
    - `POST /instance-invites/:id/revoke`.
    - `GET /spaces?cursor=` → id, name, status, memberCounts by role,
      createdAt, mediaBytesUsed — **no names of members, no content**.
@@ -54,7 +58,10 @@ dashboards (v2), user data export (36 handles space export via owner).
      counts via worker-shared Redis).
    - `GET /audit?spaceId=&cursor=` — instance-level audit reader (full
      catalog incl. `admin.*`; this is the operator view, distinct from
-     the guardian-visible subset).
+     the guardian-visible subset). Metadata in responses passes through
+     the shared `AUDIT_METADATA_ALLOWLIST` filter (11) — the
+     content-free invariant applies to audit metadata exactly as to
+     every other admin DTO.
 3. CLI `scripts/ops.mjs` (Node ≥ 22, no deps beyond `node:` builtins;
    reads `FAMCHAT_API_URL` + `OPERATOR_TOKEN` from env or `.env`):
    subcommands `instance-invite create|list|revoke`, `spaces list`,
@@ -89,8 +96,9 @@ pnpm ops -- stats   # against dev stack
 
 ## Dependencies
 
-07 (invites consumed), 11 (audit), 12 (rate limit). Fanout halt checked
-again in 37.
+06 (session revocation), 07 (invites consumed), 10 (suspension guard),
+11 (audit), 12 (rate limit), 15 (WS ejection machinery). Fanout halt
+checked again in 37.
 
 ## Non-goals
 

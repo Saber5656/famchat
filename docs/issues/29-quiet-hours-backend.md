@@ -36,8 +36,14 @@ the suppression helper).
      overlapping/adjacent windows correctly);
    - unit tests: JST evening window, midnight wrap (21:00–07:00 checked at
      23:59, 00:01, 06:59, 07:00), multi-rule overlap merge, disabled,
-     DST transitions using `Europe/London` on change dates, invalid-zone
-     guarded upstream by settings validation.
+     invalid-zone guarded upstream by settings validation, and **exact
+     DST fixtures** for `Europe/London`: spring-forward night
+     2026-03-29 (window 21:00–07:00; probe UTC instants corresponding to
+     local 00:30 and 02:30 — note local 01:00–01:59 does not exist) and
+     fall-back night 2026-10-25 (probe both occurrences of local 01:30);
+     for each probe the test pins `active` and the exact `until` UTC
+     instant as committed snapshot expectations with a comment deriving
+     each value.
 2. `guardian.setQuietHours({ spaceId, childUserId, quietHours })` —
    guardian; validates schema + space timezone exists; writes
    `child_settings.quiet_hours`; audit `quiet_hours.update`; WS
@@ -51,11 +57,15 @@ the suppression helper).
      `rooms.*` reads and writes, `board.*` all, `receipts.*`,
      `attachments.*`, `moderation`/`guardian` n/a (children lack
      permission anyway).
-   - **Exempt allowlist** (explicit constant `QUIET_EXEMPT_PROCEDURES`):
-     `reports.create`, `auth.me`, `auth.quietState`, `auth.logout`,
-     `auth.verifyChildPin`, `notifications.feed/markRead/unreadCounts`,
-     `auth.updateProfile` (locale/avatar remain usable — low-risk,
-     documented), `spaces.list/get`.
+   - **Exempt allowlist** (explicit constant `QUIET_EXEMPT_PROCEDURES`
+     in `packages/shared`, exact procedure identifiers, canonical in
+     DESIGN §13.5): `reports.create`, `auth.me`, `auth.quietState`,
+     `auth.logout`, `auth.verifyChildPin`, `auth.updateLocale` (the
+     micro-procedure from 25 — full `auth.updateProfile` is NOT exempt;
+     a child cannot change avatar/display fields during quiet hours),
+     `notifications.feed`, `notifications.markRead`,
+     `notifications.markAllRead`, `notifications.unreadCounts`,
+     `spaces.list`, `spaces.get`.
    - Error: `QUIET_HOURS_ACTIVE` with `details.until` (ISO string).
    - Unskip/activate the 28 exemption test.
 5. WS enforcement (activate 15's `wsQuietGate`): on subscribeRoom during
@@ -96,8 +106,9 @@ pnpm --filter @famchat/api test -- --grep quiet
 
 ## Dependencies
 
-09 (child_settings), 13 (procedures to gate), 15 (WS), 28 (exemption
-cross-ref).
+09 (child_settings), 13/14/16/17/19 (the procedure sets this issue
+gates must exist), 15 (WS), 25 (`auth.updateLocale` exempt procedure),
+28 (exemption cross-ref).
 
 ## Non-goals
 

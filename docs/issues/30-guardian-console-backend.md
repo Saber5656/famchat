@@ -24,15 +24,22 @@ Out of scope: UIs (31/32), deletion lifecycle (36), quiet-hours setter
 ## Detailed Requirements
 
 1. `guardian.childOverview({ spaceId, childUserId })` — guardian; returns
-   one composed DTO:
-   `{ child: { profile, birthYear, avatarPreset }, devices: [session
-   summaries from 09], rooms: [{ id, name, type, memberCount }] (all rooms
-   the child is in), quietHours: { config, activeNow, until? },
-   recentHits: last 10 moderation_hits involving the child as author,
-   recentReports: last 10 reports where the child is reporter or target
-   (target identity per 28 privacy rules), counts: { openHits,
-   openReports } }` — single procedure, parallel queries, one round trip
-   for the 31 dashboard.
+   one composed DTO (pinned in `packages/shared/src/api/guardian.ts`):
+   `{ child: { userId, displayName, avatarPreset, birthYear, locale },
+   devices: DeviceDTO[] (exactly 09's listDevices shape), rooms: [{ id,
+   name, type, memberCount }] (all rooms the child is in), quietHours:
+   { config, activeNow, until? }, recentHits: ModerationHitDTO[≤10]
+   (27's DTO) authored by the child — derivation rule: for content
+   types message/board_post/board_comment join the content table on
+   content_id and filter author = child; display_name hits carry
+   `metadata.userId` and match on that, recentReports:
+   ReportQueueDTO[≤10] (28's DTO) where the child is reporter or
+   target }`.
+1b. `guardian.dashboard({ spaceId })` — guardian; the 31 dashboard's
+   single data source: `{ openHits, openReports, children: [{
+   childUserId, displayName, avatarPreset, quietNow, deviceCount,
+   openHitCount, openReportCount }] }` — one procedure, parallel
+   queries.
 2. `members.list({ spaceId })` — any member; roster with roles, isOwner,
    joinedAt, child birthYear visible to guardians only (DTO branches by
    requester role — snapshot-tested).
@@ -58,35 +65,41 @@ Out of scope: UIs (31/32), deletion lifecycle (36), quiet-hours setter
    machinery); moderation fields take effect next write (27 reads the
    row); audit `space.settings_update` with a changed-fields diff in
    metadata (values for non-sensitive fields only).
-8. `guardian.removeMessage` — thin alias over 14's guardian delete kept
-   for console ergonomics? **No**: do not add a duplicate procedure;
-   instead document in the router that 31 calls `messages.delete` — this
-   issue only verifies the audit trail (`message.delete_any`) renders in
-   the guardian audit view (11). (Explicit non-duplication decision.)
-9. Tests: childOverview composition against a seeded family (shape
-   snapshot + counts); every members rule above incl. LAST_GUARDIAN,
-   owner-protection, owner-transfer atomicity under parallel calls;
-   settings validation (bad TZ rejected) + timezone-change quiet-state
-   push; role-branched roster DTO; cross-tenant sweep; audit rows for
-   each mutation.
+8. Message removal: per DESIGN §8.2 there is deliberately NO
+   `guardian.removeMessage` alias — the console (31) calls
+   `messages.delete` (guardian `message.deleteAny` path). This issue
+   only verifies that trail renders in the guardian audit view.
+9. Tests: childOverview + dashboard composition against a seeded family
+   (shape snapshots + counts); every members rule above incl.
+   LAST_GUARDIAN, owner-protection, owner-transfer atomicity under
+   parallel calls; settings validation (bad TZ rejected) +
+   timezone-change quiet-state push; role-branched roster DTO;
+   cross-tenant sweep; audit rows for each mutation; WS
+   `member.updated` emissions observed.
 
 ## Acceptance Criteria
 
-- [ ] childOverview returns the exact composed shape in one call.
-- [ ] Member management honors every §13.1 owner/guardian rule with tests
-      per rule.
+- [ ] `childOverview` and `dashboard` return the exact pinned DTO shapes
+      in one call each (snapshot tests).
+- [ ] `members.list/remove/leave/changeRole` and
+      `spaces.transferOwnership` each honor their §13.1 rule with a
+      dedicated test (incl. LAST_GUARDIAN, owner-protection).
 - [ ] Ownership transfer is atomic and index-safe under race.
 - [ ] Settings changes propagate to moderation + quiet-hours behavior.
+- [ ] Every mutation writes its audit row and emits `member.updated`
+      where applicable.
 
 ## Validation
 
 ```bash
-pnpm --filter @famchat/api test -- --grep "guardian|members|updateSettings"
+pnpm -w typecheck && pnpm -w lint
+pnpm --filter @famchat/api test -- -t guardian
+pnpm --filter @famchat/api test -- -t members
 ```
 
 ## Dependencies
 
-27, 28, 29 (aggregated data), 09, 13.
+09, 11 (audit rows), 13, 15 (WS events), 27, 28, 29 (aggregated data).
 
 ## Non-goals
 
